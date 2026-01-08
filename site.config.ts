@@ -1,5 +1,5 @@
-export const siteUrl = "https://mizar.majestico.co";
-export const siteTitle = "Mizar";
+export const siteUrl = "https://lookoutscout.vercel.app";
+export const siteTitle = "Lookout Set Scout";
 export const defaultLocale = "en";
-export const locales = ["en", "it"];
-export type Locale = "en" | "it";
+export const locales = ["en", "fr"];
+export type Locale = "en" | "fr";
