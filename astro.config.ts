@@ -32,6 +32,12 @@ export default defineConfig({
 		define: {
 			__DATE__: `'${new Date().toISOString()}'`,
 		},
+		optimizeDeps: {
+			exclude: ["@keystatic/core", "@keystatic/astro"],
+		},
+		ssr: {
+			noExternal: ["@keystatic/core", "@keystatic/astro"],
+		},
 	},
 	integrations: [
 		alpinejs(),

@@ -1,9 +1,2582 @@
-import { makeGenericAPIRouteHandler } from '@keystatic/core/api/generic';
+import * as cookie from 'cookie';
+import * as s from 'superstruct';
+import path$1 from 'node:path';
+import fs$1 from 'node:fs/promises';
+import fs from 'fs/promises';
+import path from 'path';
+import { parse, nodes } from '@markdoc/markdoc/dist/index.mjs';
+import { assertNever as assertNever$1 } from 'emery/assertions';
+import { assertNever, assert, isString } from 'emery';
+import { jsx, jsxs } from 'react/jsx-runtime';
+import { createHash } from 'crypto';
+import { sanitizeUrl } from '@braintree/sanitize-url';
+import ignore from 'ignore';
+import { webcrypto, randomBytes } from 'node:crypto';
 import { parseString } from 'set-cookie-parser';
-import { config as config$1, collection, singleton, fields } from '@keystatic/core';
-import { block, wrapper } from '@keystatic/core/content-components';
-import { jsxs, jsx } from 'react/jsx-runtime';
 export { renderers } from '../../../renderers.mjs';
+
+class FieldDataError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'FieldDataError';
+  }
+}
+
+function assertRequired(value, validation, label) {
+  if (value === null && validation !== null && validation !== void 0 && validation.isRequired) {
+    throw new FieldDataError(`${label} is required`);
+  }
+}
+function basicFormFieldWithSimpleReaderParse(config) {
+  return {
+    kind: 'form',
+    Input: config.Input,
+    defaultValue: config.defaultValue,
+    parse: config.parse,
+    serialize: config.serialize,
+    validate: config.validate,
+    reader: {
+      parse(value) {
+        return config.validate(config.parse(value));
+      }
+    },
+    label: config.label
+  };
+}
+
+// this is used in react-server environments to avoid bundling UI when the reader API is used
+// if you added a new field and get an error that there's missing a missing export here,
+// you probably just need to add another empty export here
+
+function empty$1() {
+  throw new Error("unexpected call to function that shouldn't be called in React server component environment");
+}
+let SlugFieldInput = empty$1,
+  TextFieldInput = empty$1,
+  UrlFieldInput = empty$1,
+  SelectFieldInput = empty$1,
+  RelationshipInput = empty$1,
+  PathReferenceInput = empty$1,
+  MultiselectFieldInput = empty$1,
+  MultiRelationshipInput = empty$1,
+  IntegerFieldInput = empty$1,
+  NumberFieldInput = empty$1,
+  ImageFieldInput = empty$1,
+  FileFieldInput = empty$1,
+  DatetimeFieldInput = empty$1,
+  DateFieldInput = empty$1,
+  CloudImageFieldInput = empty$1,
+  BlocksFieldInput = empty$1,
+  DocumentFieldInput = empty$1,
+  CheckboxFieldInput = empty$1,
+  createEditorSchema = empty$1,
+  getDefaultValue = empty$1,
+  parseToEditorState = empty$1,
+  serializeFromEditorState = empty$1,
+  parseToEditorStateMDX = empty$1,
+  serializeFromEditorStateMDX = empty$1,
+  createEditorStateFromYJS = empty$1,
+  prosemirrorToYXmlFragment = empty$1,
+  normalizeDocumentFieldChildren = empty$1,
+  slugify = empty$1,
+  serializeMarkdoc = empty$1;
+
+function validateText(val, min, max, fieldLabel, slugInfo, pattern) {
+  if (val.length < min) {
+    if (min === 1) {
+      return `${fieldLabel} must not be empty`;
+    } else {
+      return `${fieldLabel} must be at least ${min} characters long`;
+    }
+  }
+  if (val.length > max) {
+    return `${fieldLabel} must be no longer than ${max} characters`;
+  }
+  if (pattern && !pattern.regex.test(val)) {
+    return pattern.message || `${fieldLabel} must match the pattern ${pattern.regex}`;
+  }
+  if (slugInfo) {
+    if (val === '') {
+      return `${fieldLabel} must not be empty`;
+    }
+    if (val === '..') {
+      return `${fieldLabel} must not be ..`;
+    }
+    if (val === '.') {
+      return `${fieldLabel} must not be .`;
+    }
+    if (slugInfo.glob === '**') {
+      const split = val.split('/');
+      if (split.some(s => s === '..')) {
+        return `${fieldLabel} must not contain ..`;
+      }
+      if (split.some(s => s === '.')) {
+        return `${fieldLabel} must not be .`;
+      }
+    }
+    if ((slugInfo.glob === '*' ? /[\\/]/ : /[\\]/).test(val)) {
+      return `${fieldLabel} must not contain slashes`;
+    }
+    if (/^\s|\s$/.test(val)) {
+      return `${fieldLabel} must not start or end with spaces`;
+    }
+    if (slugInfo.slugs.has(val)) {
+      return `${fieldLabel} must be unique`;
+    }
+  }
+}
+
+function parseAsNormalField(value) {
+  if (value === undefined) {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    throw new FieldDataError('Must be a string');
+  }
+  return value;
+}
+const emptySet = new Set();
+function text({
+  label,
+  defaultValue = '',
+  validation: {
+    length: {
+      max = Infinity,
+      min = 0
+    } = {},
+    pattern,
+    isRequired
+  } = {},
+  description,
+  multiline = false
+}) {
+  min = Math.max(isRequired ? 1 : 0, min);
+  function validate(value, slugField) {
+    const message = validateText(value, min, max, label, slugField, pattern);
+    if (message !== undefined) {
+      throw new FieldDataError(message);
+    }
+    return value;
+  }
+  return {
+    kind: 'form',
+    formKind: 'slug',
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(TextFieldInput, {
+        label: label,
+        description: description,
+        min: min,
+        max: max,
+        multiline: multiline,
+        pattern: pattern,
+        ...props
+      });
+    },
+    defaultValue() {
+      return typeof defaultValue === 'string' ? defaultValue : defaultValue();
+    },
+    parse(value, args) {
+      if ((args === null || args === void 0 ? void 0 : args.slug) !== undefined) {
+        return args.slug;
+      }
+      return parseAsNormalField(value);
+    },
+    serialize(value) {
+      return {
+        value: value === '' ? undefined : value
+      };
+    },
+    serializeWithSlug(value) {
+      return {
+        slug: value,
+        value: undefined
+      };
+    },
+    reader: {
+      parse(value) {
+        const parsed = parseAsNormalField(value);
+        return validate(parsed, undefined);
+      },
+      parseWithSlug(_value, args) {
+        validate(parseAsNormalField(args.slug), {
+          glob: args.glob,
+          slugs: emptySet
+        });
+        return null;
+      }
+    },
+    validate(value, args) {
+      return validate(value, args === null || args === void 0 ? void 0 : args.slugField);
+    }
+  };
+}
+
+function object(fields, opts) {
+  return {
+    ...opts,
+    kind: 'object',
+    fields
+  };
+}
+
+function getValueAtPropPath(value, inputPath) {
+  const path = [...inputPath];
+  while (path.length) {
+    const key = path.shift();
+    value = value[key];
+  }
+  return value;
+}
+function transformProps(schema, value, visitors, path = []) {
+  if (schema.kind === 'form' || schema.kind === 'child') {
+    if (visitors[schema.kind]) {
+      return visitors[schema.kind](schema, value, path);
+    }
+    return value;
+  }
+  if (schema.kind === 'object') {
+    const val = Object.fromEntries(Object.entries(schema.fields).map(([key, val]) => {
+      return [key, transformProps(val, value[key], visitors, [...path, key])];
+    }));
+    if (visitors.object) {
+      return visitors[schema.kind](schema, val, path);
+    }
+    return val;
+  }
+  if (schema.kind === 'array') {
+    const val = value.map((val, idx) => transformProps(schema.element, val, visitors, path.concat(idx)));
+    if (visitors.array) {
+      return visitors[schema.kind](schema, val, path);
+    }
+    return val;
+  }
+  if (schema.kind === 'conditional') {
+    const discriminant = transformProps(schema.discriminant, value.discriminant, visitors, path.concat('discriminant'));
+    const conditionalVal = transformProps(schema.values[discriminant.toString()], value.value, visitors, path.concat('value'));
+    const val = {
+      discriminant,
+      value: conditionalVal
+    };
+    if (visitors.conditional) {
+      return visitors[schema.kind](schema, val, path);
+    }
+    return val;
+  }
+  assertNever$1(schema);
+}
+
+// a v important note
+// marks in the markdown ast/html are represented quite differently to how they are in slate
+// if you had the markdown **something https://keystonejs.com something**
+// the bold node is the parent of the link node
+// but in slate, marks are only represented on text nodes
+
+const currentlyActiveMarks = new Set();
+const currentlyDisabledMarks = new Set();
+let currentLink = null;
+function addMarkToChildren(mark, cb) {
+  const wasPreviouslyActive = currentlyActiveMarks.has(mark);
+  currentlyActiveMarks.add(mark);
+  try {
+    return cb();
+  } finally {
+    if (!wasPreviouslyActive) {
+      currentlyActiveMarks.delete(mark);
+    }
+  }
+}
+function setLinkForChildren(href, cb) {
+  // we'll only use the outer link
+  if (currentLink !== null) {
+    return cb();
+  }
+  currentLink = href;
+  try {
+    return cb();
+  } finally {
+    currentLink = null;
+  }
+}
+
+/**
+ * This type is more strict than `Element & { type: 'link'; }` because `children`
+ * is constrained to only contain Text nodes. This can't be assumed generally around the editor
+ * (because of potentially future inline components or nested links(which are normalized away but the editor needs to not break if it happens))
+ * but where this type is used, we're only going to allow links to contain Text and that's important
+ * so that we know a block will never be inside an inline because Slate gets unhappy when that happens
+ * (really the link inline should probably be a mark rather than an inline,
+ * non-void inlines are probably always bad but that would imply changing the document
+ * structure which would be such unnecessary breakage)
+ */
+
+function getInlineNodes(text) {
+  const node = {
+    text
+  };
+  for (const mark of currentlyActiveMarks) {
+    if (!currentlyDisabledMarks.has(mark)) {
+      node[mark] = true;
+    }
+  }
+  if (currentLink !== null) {
+    return [{
+      text: ''
+    }, {
+      type: 'link',
+      href: currentLink,
+      children: [node]
+    }, {
+      text: ''
+    }];
+  }
+  return [node];
+}
+
+class VariableChildFields extends Error {
+  constructor() {
+    super('There are a variable number of child fields');
+  }
+}
+function findSingleChildField(schema) {
+  try {
+    const result = _findConstantChildFields(schema, [], new Set());
+    if (result.length === 1) {
+      return result[0];
+    }
+    return;
+  } catch (err) {
+    if (err instanceof VariableChildFields) {
+      return;
+    }
+    throw err;
+  }
+}
+function _findConstantChildFields(schema, path, seenSchemas) {
+  if (seenSchemas.has(schema)) {
+    return [];
+  }
+  seenSchemas.add(schema);
+  switch (schema.kind) {
+    case 'form':
+      return [];
+    case 'child':
+      return [{
+        relativePath: path,
+        options: schema.options,
+        kind: 'child'
+      }];
+    case 'conditional':
+      {
+        if (couldContainChildField(schema)) {
+          throw new VariableChildFields();
+        }
+        return [];
+      }
+    case 'array':
+      {
+        if (schema.asChildTag) {
+          const child = _findConstantChildFields(schema.element, [], seenSchemas);
+          if (child.length > 1) {
+            return [];
+          }
+          return [{
+            kind: 'array',
+            asChildTag: schema.asChildTag,
+            field: schema,
+            relativePath: path,
+            child: child[0]
+          }];
+        }
+        if (couldContainChildField(schema)) {
+          throw new VariableChildFields();
+        }
+        return [];
+      }
+    case 'object':
+      {
+        const paths = [];
+        for (const [key, value] of Object.entries(schema.fields)) {
+          paths.push(..._findConstantChildFields(value, path.concat(key), seenSchemas));
+        }
+        return paths;
+      }
+  }
+}
+function couldContainChildField(schema, seen = new Set()) {
+  if (seen.has(schema)) {
+    return false;
+  }
+  seen.add(schema);
+  switch (schema.kind) {
+    case 'form':
+      return false;
+    case 'child':
+      return true;
+    case 'conditional':
+      return Object.values(schema.values).some(value => couldContainChildField(value, seen));
+    case 'object':
+      return Object.keys(schema.fields).some(key => couldContainChildField(schema.fields[key], seen));
+    case 'array':
+      return couldContainChildField(schema.element, seen);
+  }
+}
+
+function inlineNodeFromMarkdoc(node) {
+  if (node.type === 'inline') {
+    return inlineChildrenFromMarkdoc(node.children);
+  }
+  if (node.type === 'link') {
+    return setLinkForChildren(node.attributes.href, () => inlineChildrenFromMarkdoc(node.children));
+  }
+  if (node.type === 'text') {
+    return getInlineNodes(node.attributes.content);
+  }
+  if (node.type === 'strong') {
+    return addMarkToChildren('bold', () => inlineChildrenFromMarkdoc(node.children));
+  }
+  if (node.type === 'code') {
+    return addMarkToChildren('code', () => getInlineNodes(node.attributes.content));
+  }
+  if (node.type === 'em') {
+    return addMarkToChildren('italic', () => inlineChildrenFromMarkdoc(node.children));
+  }
+  if (node.type === 's') {
+    return addMarkToChildren('strikethrough', () => inlineChildrenFromMarkdoc(node.children));
+  }
+  if (node.type === 'tag') {
+    if (node.tag === 'u') {
+      return addMarkToChildren('underline', () => inlineChildrenFromMarkdoc(node.children));
+    }
+    if (node.tag === 'kbd') {
+      return addMarkToChildren('keyboard', () => inlineChildrenFromMarkdoc(node.children));
+    }
+    if (node.tag === 'sub') {
+      return addMarkToChildren('subscript', () => inlineChildrenFromMarkdoc(node.children));
+    }
+    if (node.tag === 'sup') {
+      return addMarkToChildren('superscript', () => inlineChildrenFromMarkdoc(node.children));
+    }
+  }
+  if (node.type === 'softbreak') {
+    return getInlineNodes(' ');
+  }
+  if (node.type === 'hardbreak') {
+    return getInlineNodes('\n');
+  }
+  if (node.tag === 'component-inline-prop' && Array.isArray(node.attributes.propPath) && node.attributes.propPath.every(x => typeof x === 'string' || typeof x === 'number')) {
+    return {
+      type: 'component-inline-prop',
+      children: inlineFromMarkdoc(node.children),
+      propPath: node.attributes.propPath
+    };
+  }
+  throw new Error(`Unknown inline node type: ${node.type}`);
+}
+function inlineChildrenFromMarkdoc(nodes) {
+  return nodes.flatMap(inlineNodeFromMarkdoc);
+}
+function inlineFromMarkdoc(nodes) {
+  const transformedNodes = nodes.flatMap(inlineNodeFromMarkdoc);
+  const nextNodes = [];
+  let lastNode;
+  for (const [idx, node] of transformedNodes.entries()) {
+    var _lastNode;
+    if (node.type === undefined && node.text === '' && ((_lastNode = lastNode) === null || _lastNode === void 0 ? void 0 : _lastNode.type) === undefined && idx !== transformedNodes.length - 1) {
+      continue;
+    }
+    nextNodes.push(node);
+    lastNode = node;
+  }
+  if (!nextNodes.length) {
+    nextNodes.push({
+      text: ''
+    });
+  }
+  return nextNodes;
+}
+function fromMarkdoc(node, componentBlocks) {
+  const nodes = node.children.flatMap(x => fromMarkdocNode(x, componentBlocks));
+  if (nodes.length === 0) {
+    return [{
+      type: 'paragraph',
+      children: [{
+        text: ''
+      }]
+    }];
+  }
+  if (nodes[nodes.length - 1].type !== 'paragraph') {
+    nodes.push({
+      type: 'paragraph',
+      children: [{
+        text: ''
+      }]
+    });
+  }
+  return nodes;
+}
+function fromMarkdocNode(node, componentBlocks) {
+  if (node.type === 'blockquote') {
+    return {
+      type: 'blockquote',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'fence') {
+    const {
+      language,
+      content,
+      ...rest
+    } = node.attributes;
+    return {
+      type: 'code',
+      children: [{
+        text: content.replace(/\n$/, '')
+      }],
+      ...(typeof language === 'string' ? {
+        language
+      } : {}),
+      ...rest
+    };
+  }
+  if (node.type === 'heading') {
+    return {
+      ...node.attributes,
+      level: node.attributes.level,
+      type: 'heading',
+      children: inlineFromMarkdoc(node.children)
+    };
+  }
+  if (node.type === 'list') {
+    return {
+      type: node.attributes.ordered ? 'ordered-list' : 'unordered-list',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'item') {
+    var _node$children$;
+    const children = [{
+      type: 'list-item-content',
+      children: node.children.length ? inlineFromMarkdoc([node.children[0]]) : [{
+        text: ''
+      }]
+    }];
+    if (((_node$children$ = node.children[1]) === null || _node$children$ === void 0 ? void 0 : _node$children$.type) === 'list') {
+      const list = node.children[1];
+      children.push({
+        type: list.attributes.ordered ? 'ordered-list' : 'unordered-list',
+        children: list.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+      });
+    }
+    return {
+      type: 'list-item',
+      children
+    };
+  }
+  if (node.type === 'paragraph') {
+    if (node.children.length === 1 && node.children[0].type === 'inline' && node.children[0].children.length === 1 && node.children[0].children[0].type === 'image') {
+      var _image$attributes$tit;
+      const image = node.children[0].children[0];
+      return {
+        type: 'image',
+        src: decodeURI(image.attributes.src),
+        alt: image.attributes.alt,
+        title: (_image$attributes$tit = image.attributes.title) !== null && _image$attributes$tit !== void 0 ? _image$attributes$tit : '',
+        children: [{
+          text: ''
+        }]
+      };
+    }
+    const children = inlineFromMarkdoc(node.children);
+    if (children.length === 1 && children[0].type === 'component-inline-prop') {
+      return children[0];
+    }
+    return {
+      type: 'paragraph',
+      children,
+      textAlign: node.attributes.textAlign
+    };
+  }
+  if (node.type === 'hr') {
+    return {
+      type: 'divider',
+      children: [{
+        text: ''
+      }]
+    };
+  }
+  if (node.type === 'table') {
+    return {
+      type: 'table',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'tbody') {
+    return {
+      type: 'table-body',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'thead') {
+    if (!node.children.length) return [];
+    return {
+      type: 'table-head',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'tr') {
+    return {
+      type: 'table-row',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'td') {
+    return {
+      type: 'table-cell',
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'th') {
+    return {
+      type: 'table-cell',
+      header: true,
+      children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+    };
+  }
+  if (node.type === 'tag') {
+    if (node.tag === 'table') {
+      return fromMarkdocNode(node.children[0], componentBlocks);
+    }
+    if (node.tag === 'layout') {
+      return {
+        type: 'layout',
+        layout: node.attributes.layout,
+        children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+      };
+    }
+    if (node.tag === 'layout-area') {
+      return {
+        type: 'layout-area',
+        children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+      };
+    }
+    if (node.tag === 'component-block') {
+      return {
+        type: 'component-block',
+        component: node.attributes.component,
+        props: node.attributes.props,
+        children: node.children.length === 0 ? [{
+          type: 'component-inline-prop',
+          children: [{
+            text: ''
+          }]
+        }] : node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+      };
+    }
+    if (node.tag === 'component-block-prop' && Array.isArray(node.attributes.propPath) && node.attributes.propPath.every(x => typeof x === 'string' || typeof x === 'number')) {
+      return {
+        type: 'component-block-prop',
+        children: node.children.flatMap(x => fromMarkdocNode(x, componentBlocks)),
+        propPath: node.attributes.propPath
+      };
+    }
+    if (node.tag) {
+      const componentBlock = componentBlocks[node.tag];
+      if (componentBlock) {
+        const singleChildField = findSingleChildField({
+          kind: 'object',
+          fields: componentBlock.schema
+        });
+        if (singleChildField) {
+          const newAttributes = JSON.parse(JSON.stringify(node.attributes));
+          const children = [];
+          toChildrenAndProps(node.children, children, newAttributes, singleChildField, [], componentBlocks);
+          return {
+            type: 'component-block',
+            component: node.tag,
+            props: newAttributes,
+            children
+          };
+        }
+        return {
+          type: 'component-block',
+          component: node.tag,
+          props: node.attributes,
+          children: node.children.length === 0 ? [{
+            type: 'component-inline-prop',
+            children: [{
+              text: ''
+            }]
+          }] : node.children.flatMap(x => fromMarkdocNode(x, componentBlocks))
+        };
+      }
+    }
+    throw new Error(`Unknown tag: ${node.tag}`);
+  }
+  return inlineNodeFromMarkdoc(node);
+}
+function toChildrenAndProps(fromMarkdoc, resultingChildren, value, singleChildField, parentPropPath, componentBlocks) {
+  if (singleChildField.kind === 'child') {
+    const children = fromMarkdoc.flatMap(x => fromMarkdocNode(x, componentBlocks));
+    resultingChildren.push({
+      type: `component-${singleChildField.options.kind}-prop`,
+      propPath: [...parentPropPath, ...singleChildField.relativePath],
+      children
+    });
+  }
+  if (singleChildField.kind === 'array') {
+    const arr = [];
+    for (let [idx, child] of fromMarkdoc.entries()) {
+      if (child.type === 'paragraph') {
+        child = child.children[0].children[0];
+      }
+      if (child.type !== 'tag') {
+        throw new Error(`expected tag ${singleChildField.asChildTag}, found type: ${child.type}`);
+      }
+      if (child.tag !== singleChildField.asChildTag) {
+        throw new Error(`expected tag ${singleChildField.asChildTag}, found tag: ${child.tag}`);
+      }
+      const attributes = JSON.parse(JSON.stringify(child.attributes));
+      if (singleChildField.child) {
+        toChildrenAndProps(child.children, resultingChildren, attributes, singleChildField.child, [...parentPropPath, ...singleChildField.relativePath, idx], componentBlocks);
+      }
+      arr.push(attributes);
+    }
+    const key = singleChildField.relativePath[singleChildField.relativePath.length - 1];
+    const parent = getValueAtPropPath(value, singleChildField.relativePath.slice(0, -1));
+    parent[key] = arr;
+  }
+}
+
+// these are intentionally more restrictive than the types allowed by strong and weak maps
+
+const emptyCacheNode = Symbol('emptyCacheNode');
+
+// weak keys should always come before strong keys in the arguments though that cannot be enforced with types
+function memoize(func) {
+  const cacheNode = {
+    value: emptyCacheNode,
+    strong: undefined,
+    weak: undefined
+  };
+  return (...args) => {
+    let currentCacheNode = cacheNode;
+    for (const arg of args) {
+      if (typeof arg === 'string' || typeof arg === 'number') {
+        if (currentCacheNode.strong === undefined) {
+          currentCacheNode.strong = new Map();
+        }
+        if (!currentCacheNode.strong.has(arg)) {
+          currentCacheNode.strong.set(arg, {
+            value: emptyCacheNode,
+            strong: undefined,
+            weak: undefined
+          });
+        }
+        currentCacheNode = currentCacheNode.strong.get(arg);
+        continue;
+      }
+      if (typeof arg === 'object') {
+        if (currentCacheNode.weak === undefined) {
+          currentCacheNode.weak = new WeakMap();
+        }
+        if (!currentCacheNode.weak.has(arg)) {
+          currentCacheNode.weak.set(arg, {
+            value: emptyCacheNode,
+            strong: undefined,
+            weak: undefined
+          });
+        }
+        currentCacheNode = currentCacheNode.weak.get(arg);
+        continue;
+      }
+    }
+    if (currentCacheNode.value !== emptyCacheNode) {
+      return currentCacheNode.value;
+    }
+    const result = func(...args);
+    currentCacheNode.value = result;
+    return result;
+  };
+}
+
+function fixPath(path) {
+  return path.replace(/^\.?\/+/, '').replace(/\/*$/, '');
+}
+const collectionPath = /\/\*\*?(?:$|\/)/;
+function getConfiguredCollectionPath(config, collection) {
+  var _collectionConfig$pat;
+  const collectionConfig = config.collections[collection];
+  const path = (_collectionConfig$pat = collectionConfig.path) !== null && _collectionConfig$pat !== void 0 ? _collectionConfig$pat : `${collection}/*/`;
+  if (!collectionPath.test(path)) {
+    throw new Error(`Collection path must end with /* or /** or include /*/ or /**/ but ${collection} has ${path}`);
+  }
+  return path;
+}
+function getCollectionPath(config, collection) {
+  const configuredPath = getConfiguredCollectionPath(config, collection);
+  const path = fixPath(configuredPath.replace(/\*\*?.*$/, ''));
+  return path;
+}
+function getSingletonFormat(config, singleton) {
+  return getFormatInfo(config, 'singletons', singleton);
+}
+function getSingletonPath(config, singleton) {
+  var _singleton$path, _singleton$path2;
+  if ((_singleton$path = config.singletons[singleton].path) !== null && _singleton$path !== void 0 && _singleton$path.includes('*')) {
+    throw new Error(`Singleton paths cannot include * but ${singleton} has ${config.singletons[singleton].path}`);
+  }
+  return fixPath((_singleton$path2 = config.singletons[singleton].path) !== null && _singleton$path2 !== void 0 ? _singleton$path2 : singleton);
+}
+function getDataFileExtension(formatInfo) {
+  return formatInfo.contentField ? formatInfo.contentField.contentExtension : '.' + formatInfo.data;
+}
+const getFormatInfo = memoize(_getFormatInfo);
+function _getFormatInfo(config, type, key) {
+  var _collectionOrSingleto, _format$data;
+  const collectionOrSingleton = type === 'collections' ? config.collections[key] : config.singletons[key];
+  const path = type === 'collections' ? getConfiguredCollectionPath(config, key) : (_collectionOrSingleto = collectionOrSingleton.path) !== null && _collectionOrSingleto !== void 0 ? _collectionOrSingleto : `${key}/`;
+  const dataLocation = path.endsWith('/') ? 'index' : 'outer';
+  const {
+    schema,
+    format = 'yaml'
+  } = collectionOrSingleton;
+  if (typeof format === 'string') {
+    return {
+      dataLocation,
+      contentField: undefined,
+      data: format
+    };
+  }
+  let contentField;
+  if (format.contentField) {
+    let field = {
+      kind: 'object',
+      fields: schema
+    };
+    let path = Array.isArray(format.contentField) ? format.contentField : [format.contentField];
+    let contentExtension;
+    try {
+      contentExtension = getContentExtension(path, field, () => JSON.stringify(format.contentField));
+    } catch (err) {
+      if (err instanceof ContentFieldLocationError) {
+        throw new Error(`${err.message} (${type}.${key})`);
+      }
+      throw err;
+    }
+    contentField = {
+      path,
+      contentExtension
+    };
+  }
+  return {
+    data: (_format$data = format.data) !== null && _format$data !== void 0 ? _format$data : 'yaml',
+    contentField,
+    dataLocation
+  };
+}
+class ContentFieldLocationError extends Error {
+  constructor(message) {
+    super(message);
+  }
+}
+function getContentExtension(path, schema, debugName) {
+  if (path.length === 0) {
+    if (schema.kind !== 'form' || schema.formKind !== 'content') {
+      throw new ContentFieldLocationError(`Content field for ${debugName()} is not a content field`);
+    }
+    return schema.contentExtension;
+  }
+  if (schema.kind === 'object') {
+    const field = schema.fields[path[0]];
+    if (!field) {
+      throw new ContentFieldLocationError(`Field ${debugName()} specified in contentField does not exist`);
+    }
+    return getContentExtension(path.slice(1), field, debugName);
+  }
+  if (schema.kind === 'conditional') {
+    if (path[0] !== 'value') {
+      throw new ContentFieldLocationError(`Conditional fields referenced in a contentField path must only reference the value field (${debugName()})`);
+    }
+    let contentExtension;
+    const innerPath = path.slice(1);
+    for (const value of Object.values(schema.values)) {
+      const foundContentExtension = getContentExtension(innerPath, value, debugName);
+      if (!contentExtension) {
+        contentExtension = foundContentExtension;
+        continue;
+      }
+      if (contentExtension !== foundContentExtension) {
+        throw new ContentFieldLocationError(`contentField ${debugName()} has conflicting content extensions`);
+      }
+    }
+    if (!contentExtension) {
+      throw new ContentFieldLocationError(`contentField ${debugName()} does not point to a content field`);
+    }
+    return contentExtension;
+  }
+  throw new ContentFieldLocationError(`Path specified in contentField ${debugName()} does not point to a content field`);
+}
+
+function getSrcPrefix(publicPath, slug) {
+  return typeof publicPath === 'string' ? `${publicPath.replace(/\/*$/, '')}/${slug === undefined ? '' : slug + '/'}` : '';
+}
+
+function deserializeFiles(nodes, componentBlocks, files, otherFiles, mode, documentFeatures, slug) {
+  return nodes.map(node => {
+    if (node.type === 'component-block') {
+      const componentBlock = componentBlocks[node.component];
+      if (!componentBlock) return node;
+      const schema = object(componentBlock.schema);
+      return {
+        ...node,
+        props: deserializeProps(schema, node.props, files, otherFiles, mode, slug)
+      };
+    }
+    if (node.type === 'image' && typeof node.src === 'string' && mode === 'edit') {
+      var _ref;
+      const prefix = getSrcPrefixForImageBlock(documentFeatures, slug);
+      const filename = node.src.slice(prefix.length);
+      const content = (_ref = typeof documentFeatures.images === 'object' && typeof documentFeatures.images.directory === 'string' ? otherFiles.get(fixPath(documentFeatures.images.directory)) : files) === null || _ref === void 0 ? void 0 : _ref.get(filename);
+      if (!content) {
+        return {
+          type: 'paragraph',
+          children: [{
+            text: `Missing image ${filename}`
+          }]
+        };
+      }
+      return {
+        type: 'image',
+        src: {
+          filename,
+          content
+        },
+        alt: node.alt,
+        title: node.title,
+        children: [{
+          text: ''
+        }]
+      };
+    }
+    if (typeof node.type === 'string') {
+      const children = deserializeFiles(node.children, componentBlocks, files, otherFiles, mode, documentFeatures, slug);
+      return {
+        ...node,
+        children
+      };
+    }
+    return node;
+  });
+}
+function deserializeProps(schema, value, files, otherFiles, mode, slug) {
+  return transformProps(schema, value, {
+    form: (schema, value) => {
+      if (schema.formKind === 'asset') {
+        var _otherFiles$get;
+        if (mode === 'read') {
+          return schema.reader.parse(value);
+        }
+        const filename = schema.filename(value, {
+          slug,
+          suggestedFilenamePrefix: undefined
+        });
+        return schema.parse(value, {
+          asset: filename ? schema.directory ? (_otherFiles$get = otherFiles.get(schema.directory)) === null || _otherFiles$get === void 0 ? void 0 : _otherFiles$get.get(filename) : files.get(filename) : undefined,
+          slug
+        });
+      }
+      if (schema.formKind === 'content' || schema.formKind === 'assets') {
+        throw new Error('Not implemented');
+      }
+      if (mode === 'read') {
+        return schema.reader.parse(value);
+      }
+      return schema.parse(value, undefined);
+    }
+  });
+}
+function getSrcPrefixForImageBlock(documentFeatures, slug) {
+  return getSrcPrefix(typeof documentFeatures.images === 'object' ? documentFeatures.images.publicPath : undefined, slug);
+}
+
+async function sha1(content) {
+  return createHash('sha1').update(content).digest('hex');
+}
+
+const textEncoder$1 = new TextEncoder();
+const blobShaCache = new WeakMap();
+async function blobSha(contents) {
+  const cached = blobShaCache.get(contents);
+  if (cached !== undefined) return cached;
+  const blobPrefix = textEncoder$1.encode('blob ' + contents.length + '\0');
+  const array = new Uint8Array(blobPrefix.byteLength + contents.byteLength);
+  array.set(blobPrefix, 0);
+  array.set(contents, blobPrefix.byteLength);
+  const digestPromise = sha1(array);
+  blobShaCache.set(contents, digestPromise);
+  digestPromise.then(digest => blobShaCache.set(contents, digest));
+  return digestPromise;
+}
+function getNodeAtPath(tree, path) {
+  if (path === '') return tree;
+  let node = tree;
+  for (const part of path.split('/')) {
+    if (!node.has(part)) {
+      node.set(part, new Map());
+    }
+    const innerNode = node.get(part);
+    assert(innerNode instanceof Map, 'expected tree');
+    node = innerNode;
+  }
+  return node;
+}
+function getFilename(path) {
+  return path.replace(/.*\//, '');
+}
+function getDirname(path) {
+  if (!path.includes('/')) return '';
+  return path.replace(/\/[^/]+$/, '');
+}
+function toTreeChanges(changes) {
+  const changesRoot = new Map();
+  for (const deletion of changes.deletions) {
+    const parentTree = getNodeAtPath(changesRoot, getDirname(deletion));
+    parentTree.set(getFilename(deletion), 'delete');
+  }
+  for (const addition of changes.additions) {
+    const parentTree = getNodeAtPath(changesRoot, getDirname(addition.path));
+    parentTree.set(getFilename(addition.path), addition.contents);
+  }
+  return changesRoot;
+}
+const SPACE_CHAR_CODE = 32;
+const space = new Uint8Array([SPACE_CHAR_CODE]);
+const nullchar = new Uint8Array([0]);
+const tree$1 = textEncoder$1.encode('tree ');
+
+// based on https://github.com/isomorphic-git/isomorphic-git/blob/c09dfa20ffe0ab9e6602e0fa172d72ba8994e443/src/models/GitTree.js#L108-L122
+function treeSha(children) {
+  const entries = [...children].map(([name, node]) => ({
+    name,
+    sha: node.entry.sha,
+    mode: node.entry.mode
+  }));
+  entries.sort((a, b) => {
+    const aName = a.mode === '040000' ? a.name + '/' : a.name;
+    const bName = b.mode === '040000' ? b.name + '/' : b.name;
+    return aName === bName ? 0 : aName < bName ? -1 : 1;
+  });
+  const treeObject = entries.flatMap(entry => {
+    const mode = textEncoder$1.encode(entry.mode.replace(/^0/, ''));
+    const name = textEncoder$1.encode(entry.name);
+    const sha = hexToBytes(entry.sha);
+    return [mode, space, name, nullchar, sha];
+  });
+  return sha1(concatBytes([tree$1, textEncoder$1.encode(treeObject.reduce((sum, val) => sum + val.byteLength, 0).toString()), nullchar, ...treeObject]));
+}
+function concatBytes(byteArrays) {
+  const totalLength = byteArrays.reduce((sum, arr) => sum + arr.byteLength, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const arr of byteArrays) {
+    result.set(arr, offset);
+    offset += arr.byteLength;
+  }
+  return result;
+}
+function hexToBytes(str) {
+  const bytes = new Uint8Array(str.length / 2);
+  for (var i = 0; i < bytes.byteLength; i += 1) {
+    const start = i * 2;
+    bytes[i] = parseInt(str.slice(start, start + 2), 16);
+  }
+  return bytes;
+}
+async function createTreeNodeEntry(path, children) {
+  const sha = await treeSha(children);
+  return {
+    path,
+    mode: '040000',
+    type: 'tree',
+    sha
+  };
+}
+async function createBlobNodeEntry(path, contents) {
+  const sha = 'sha' in contents ? contents.sha : await blobSha(contents);
+  return {
+    path,
+    mode: '100644',
+    type: 'blob',
+    sha
+  };
+}
+async function updateTreeWithChanges(tree, changes) {
+  var _await$updateTree;
+  const newTree = (_await$updateTree = await updateTree(tree, toTreeChanges(changes), [])) !== null && _await$updateTree !== void 0 ? _await$updateTree : new Map();
+  return {
+    entries: treeToEntries(newTree),
+    sha: await treeSha(newTree !== null && newTree !== void 0 ? newTree : new Map())
+  };
+}
+function treeToEntries(tree) {
+  return [...tree.values()].flatMap(x => x.children ? [x.entry, ...treeToEntries(x.children)] : [x.entry]);
+}
+async function updateTree(tree, changedTree, path) {
+  const newTree = new Map(tree);
+  for (const [key, value] of changedTree) {
+    if (value === 'delete') {
+      newTree.delete(key);
+    }
+    if (value instanceof Map) {
+      var _newTree$get$children, _newTree$get;
+      const existingChildren = (_newTree$get$children = (_newTree$get = newTree.get(key)) === null || _newTree$get === void 0 ? void 0 : _newTree$get.children) !== null && _newTree$get$children !== void 0 ? _newTree$get$children : new Map();
+      const children = await updateTree(existingChildren, value, path.concat(key));
+      if (children === undefined) {
+        newTree.delete(key);
+        continue;
+      }
+      const entry = await createTreeNodeEntry(path.concat(key).join('/'), children);
+      newTree.set(key, {
+        entry,
+        children
+      });
+    }
+    if (value instanceof Uint8Array || typeof value === 'object' && 'sha' in value) {
+      const entry = await createBlobNodeEntry(path.concat(key).join('/'), value);
+      newTree.set(key, {
+        entry
+      });
+    }
+  }
+  if (newTree.size === 0) {
+    return undefined;
+  }
+  return newTree;
+}
+
+function collectDirectoriesUsedInSchemaInner(schema, directories, seenSchemas) {
+  if (seenSchemas.has(schema)) {
+    return;
+  }
+  seenSchemas.add(schema);
+  if (schema.kind === 'array') {
+    return collectDirectoriesUsedInSchemaInner(schema.element, directories, seenSchemas);
+  }
+  if (schema.kind === 'child') {
+    return;
+  }
+  if (schema.kind === 'form') {
+    if (schema.formKind === 'asset' && schema.directory !== undefined) {
+      directories.add(fixPath(schema.directory));
+    }
+    if ((schema.formKind === 'content' || schema.formKind === 'assets') && schema.directories !== undefined) {
+      for (const directory of schema.directories) {
+        directories.add(fixPath(directory));
+      }
+    }
+    return;
+  }
+  if (schema.kind === 'object') {
+    for (const field of Object.values(schema.fields)) {
+      collectDirectoriesUsedInSchemaInner(field, directories, seenSchemas);
+    }
+    return;
+  }
+  if (schema.kind === 'conditional') {
+    for (const innerSchema of Object.values(schema.values)) {
+      collectDirectoriesUsedInSchemaInner(innerSchema, directories, seenSchemas);
+    }
+    return;
+  }
+  assertNever(schema);
+}
+function collectDirectoriesUsedInSchema(schema) {
+  const directories = new Set();
+  collectDirectoriesUsedInSchemaInner(schema, directories, new Set());
+  return directories;
+}
+function getDirectoriesForTreeKey(schema, directory, slug, format) {
+  const directories = [fixPath(directory)];
+  if (format.dataLocation === 'outer') {
+    directories.push(fixPath(directory) + getDataFileExtension(format));
+  }
+  const toAdd = '' ;
+  for (const directory of collectDirectoriesUsedInSchema(schema)) {
+    directories.push(directory + toAdd);
+  }
+  return directories;
+}
+
+const textDecoder$1 = new TextDecoder();
+const defaultAltField$1 = text({
+  label: 'Alt text',
+  description: 'This text will be used by screen readers and search engines.'
+});
+const emptyTitleField$1 = basicFormFieldWithSimpleReaderParse({
+  Input() {
+    return null;
+  },
+  defaultValue() {
+    return '';
+  },
+  parse(value) {
+    if (value === undefined) return '';
+    if (typeof value !== 'string') {
+      throw new FieldDataError('Must be string');
+    }
+    return value;
+  },
+  validate(value) {
+    return value;
+  },
+  serialize(value) {
+    return {
+      value
+    };
+  },
+  label: 'Title'
+});
+function normaliseDocumentFeatures(config) {
+  var _config$formatting, _formatting$alignment, _formatting$alignment2, _formatting$blockType, _formatting$inlineMar, _formatting$inlineMar2, _formatting$inlineMar3, _formatting$inlineMar4, _formatting$inlineMar5, _formatting$inlineMar6, _formatting$inlineMar7, _formatting$inlineMar8, _formatting$listTypes, _formatting$listTypes2, _imagesConfig$schema$, _imagesConfig$schema, _imagesConfig$schema$2, _imagesConfig$schema2;
+  const formatting = config.formatting === true ? {
+    // alignment: true, // not supported natively in markdown
+    blockTypes: true,
+    headingLevels: true,
+    inlineMarks: true,
+    listTypes: true,
+    softBreaks: true
+  } : (_config$formatting = config.formatting) !== null && _config$formatting !== void 0 ? _config$formatting : {};
+  const imagesConfig = config.images === true ? {} : config.images;
+  return {
+    formatting: {
+      alignment: formatting.alignment === true ? {
+        center: true,
+        end: true
+      } : {
+        center: !!((_formatting$alignment = formatting.alignment) !== null && _formatting$alignment !== void 0 && _formatting$alignment.center),
+        end: !!((_formatting$alignment2 = formatting.alignment) !== null && _formatting$alignment2 !== void 0 && _formatting$alignment2.end)
+      },
+      blockTypes: (formatting === null || formatting === void 0 ? void 0 : formatting.blockTypes) === true ? {
+        blockquote: true,
+        code: {
+          schema: object({})
+        }
+      } : {
+        blockquote: !!((_formatting$blockType = formatting.blockTypes) !== null && _formatting$blockType !== void 0 && _formatting$blockType.blockquote),
+        code: (_formatting$blockType2 => {
+          if (((_formatting$blockType2 = formatting.blockTypes) === null || _formatting$blockType2 === void 0 ? void 0 : _formatting$blockType2.code) === undefined) {
+            return false;
+          }
+          if (formatting.blockTypes.code === true || !formatting.blockTypes.code.schema) {
+            return {
+              schema: object({})
+            };
+          }
+          for (const key of ['type', 'children', 'language']) {
+            if (key in formatting.blockTypes.code.schema) {
+              throw new Error(`"${key}" cannot be a key in the schema for code blocks`);
+            }
+          }
+          return {
+            schema: object(formatting.blockTypes.code.schema)
+          };
+        })()
+      },
+      headings: (_obj$schema => {
+        const opt = formatting === null || formatting === void 0 ? void 0 : formatting.headingLevels;
+        const obj = typeof opt === 'object' && 'levels' in opt ? opt : {
+          levels: opt,
+          schema: undefined
+        };
+        if (obj.schema) {
+          for (const key of ['type', 'children', 'level', 'textAlign']) {
+            if (key in obj.schema) {
+              throw new Error(`"${key}" cannot be a key in the schema for headings`);
+            }
+          }
+        }
+        return {
+          levels: [...new Set(obj.levels === true ? [1, 2, 3, 4, 5, 6] : obj.levels)],
+          schema: object((_obj$schema = obj.schema) !== null && _obj$schema !== void 0 ? _obj$schema : {})
+        };
+      })(),
+      inlineMarks: formatting.inlineMarks === true ? {
+        bold: true,
+        code: true,
+        italic: true,
+        keyboard: false,
+        // not supported natively in markdown
+        strikethrough: true,
+        subscript: false,
+        // not supported natively in markdown
+        superscript: false,
+        // not supported natively in markdown
+        underline: false // not supported natively in markdown
+      } : {
+        bold: !!((_formatting$inlineMar = formatting.inlineMarks) !== null && _formatting$inlineMar !== void 0 && _formatting$inlineMar.bold),
+        code: !!((_formatting$inlineMar2 = formatting.inlineMarks) !== null && _formatting$inlineMar2 !== void 0 && _formatting$inlineMar2.code),
+        italic: !!((_formatting$inlineMar3 = formatting.inlineMarks) !== null && _formatting$inlineMar3 !== void 0 && _formatting$inlineMar3.italic),
+        strikethrough: !!((_formatting$inlineMar4 = formatting.inlineMarks) !== null && _formatting$inlineMar4 !== void 0 && _formatting$inlineMar4.strikethrough),
+        underline: !!((_formatting$inlineMar5 = formatting.inlineMarks) !== null && _formatting$inlineMar5 !== void 0 && _formatting$inlineMar5.underline),
+        keyboard: !!((_formatting$inlineMar6 = formatting.inlineMarks) !== null && _formatting$inlineMar6 !== void 0 && _formatting$inlineMar6.keyboard),
+        subscript: !!((_formatting$inlineMar7 = formatting.inlineMarks) !== null && _formatting$inlineMar7 !== void 0 && _formatting$inlineMar7.subscript),
+        superscript: !!((_formatting$inlineMar8 = formatting.inlineMarks) !== null && _formatting$inlineMar8 !== void 0 && _formatting$inlineMar8.superscript)
+      },
+      listTypes: formatting.listTypes === true ? {
+        ordered: true,
+        unordered: true
+      } : {
+        ordered: !!((_formatting$listTypes = formatting.listTypes) !== null && _formatting$listTypes !== void 0 && _formatting$listTypes.ordered),
+        unordered: !!((_formatting$listTypes2 = formatting.listTypes) !== null && _formatting$listTypes2 !== void 0 && _formatting$listTypes2.unordered)
+      },
+      softBreaks: !!formatting.softBreaks
+    },
+    links: !!config.links,
+    layouts: [...new Set((config.layouts || []).map(x => JSON.stringify(x)))].map(x => JSON.parse(x)),
+    dividers: !!config.dividers,
+    images: imagesConfig === undefined ? false : {
+      ...imagesConfig,
+      schema: {
+        alt: (_imagesConfig$schema$ = (_imagesConfig$schema = imagesConfig.schema) === null || _imagesConfig$schema === void 0 ? void 0 : _imagesConfig$schema.alt) !== null && _imagesConfig$schema$ !== void 0 ? _imagesConfig$schema$ : defaultAltField$1,
+        title: (_imagesConfig$schema$2 = (_imagesConfig$schema2 = imagesConfig.schema) === null || _imagesConfig$schema2 === void 0 ? void 0 : _imagesConfig$schema2.title) !== null && _imagesConfig$schema$2 !== void 0 ? _imagesConfig$schema$2 : emptyTitleField$1
+      }
+    },
+    tables: !!config.tables
+  };
+}
+
+/**
+ * @deprecated `fields.markdoc` has superseded this field. `fields.mdx` is also available if you prefer MDX.
+ */
+function document({
+  label,
+  componentBlocks = {},
+  description,
+  ...documentFeaturesConfig
+}) {
+  const documentFeatures = normaliseDocumentFeatures(documentFeaturesConfig);
+  return {
+    kind: 'form',
+    formKind: 'content',
+    defaultValue() {
+      return [{
+        type: 'paragraph',
+        children: [{
+          text: ''
+        }]
+      }];
+    },
+    Input(props) {
+      return /*#__PURE__*/jsx(DocumentFieldInput, {
+        componentBlocks: componentBlocks,
+        description: description,
+        label: label,
+        documentFeatures: documentFeatures,
+        ...props
+      });
+    },
+    parse(_, data) {
+      const markdoc = textDecoder$1.decode(data.content);
+      fromMarkdoc(parse(markdoc), componentBlocks);
+      return deserializeFiles(normalizeDocumentFieldChildren(), componentBlocks, data.other, data.external, 'edit', documentFeatures, data.slug);
+    },
+    contentExtension: '.mdoc',
+    validate(value) {
+      return value;
+    },
+    directories: [...collectDirectoriesUsedInSchema(object(Object.fromEntries(Object.entries(componentBlocks).map(([name, block]) => [name, object(block.schema)])))), ...(typeof documentFeatures.images === 'object' && typeof documentFeatures.images.directory === 'string' ? [fixPath(documentFeatures.images.directory)] : [])],
+    serialize(value, opts) {
+      return serializeMarkdoc();
+    },
+    reader: {
+      parse(value, data) {
+        const markdoc = textDecoder$1.decode(data.content);
+        const document = fromMarkdoc(parse(markdoc), componentBlocks);
+        return deserializeFiles(document, componentBlocks, new Map(), new Map(), 'read', documentFeatures, undefined);
+      }
+    }
+  };
+}
+
+const defaultAltField = text({
+  label: 'Alt text',
+  description: 'This text will be used by screen readers and search engines.'
+});
+const emptyTitleField = basicFormFieldWithSimpleReaderParse({
+  Input() {
+    return null;
+  },
+  defaultValue() {
+    return '';
+  },
+  parse(value) {
+    if (value === undefined) return '';
+    if (typeof value !== 'string') {
+      throw new FieldDataError('Must be string');
+    }
+    return value;
+  },
+  validate(value) {
+    return value;
+  },
+  serialize(value) {
+    return {
+      value
+    };
+  },
+  label: 'Title'
+});
+function editorOptionsToConfig(options) {
+  var _options$bold, _options$italic, _options$strikethroug, _options$code, _options$blockquote, _options$orderedList, _options$unorderedLis, _options$table, _options$link, _options$divider;
+  return {
+    bold: (_options$bold = options.bold) !== null && _options$bold !== void 0 ? _options$bold : true,
+    italic: (_options$italic = options.italic) !== null && _options$italic !== void 0 ? _options$italic : true,
+    strikethrough: (_options$strikethroug = options.strikethrough) !== null && _options$strikethroug !== void 0 ? _options$strikethroug : true,
+    code: (_options$code = options.code) !== null && _options$code !== void 0 ? _options$code : true,
+    heading: (() => {
+      let levels = [];
+      let levelsOpt = typeof options.heading === 'object' && !Array.isArray(options.heading) ? options.heading.levels : options.heading;
+      if (levelsOpt === true || levelsOpt === undefined) {
+        levels = [1, 2, 3, 4, 5, 6];
+      }
+      if (Array.isArray(levelsOpt)) {
+        levels = levelsOpt;
+      }
+      return {
+        levels,
+        schema: options.heading && typeof options.heading === 'object' && 'schema' in options.heading ? options.heading.schema : {}
+      };
+    })(),
+    blockquote: (_options$blockquote = options.blockquote) !== null && _options$blockquote !== void 0 ? _options$blockquote : true,
+    orderedList: (_options$orderedList = options.orderedList) !== null && _options$orderedList !== void 0 ? _options$orderedList : true,
+    unorderedList: (_options$unorderedLis = options.unorderedList) !== null && _options$unorderedLis !== void 0 ? _options$unorderedLis : true,
+    table: (_options$table = options.table) !== null && _options$table !== void 0 ? _options$table : true,
+    link: (_options$link = options.link) !== null && _options$link !== void 0 ? _options$link : true,
+    image: options.image !== false ? ((_opts$transformFilena, _opts$schema$alt, _opts$schema, _opts$schema$title, _opts$schema2) => {
+      const opts = options.image === true ? undefined : options.image;
+      return {
+        directory: opts === null || opts === void 0 ? void 0 : opts.directory,
+        publicPath: opts === null || opts === void 0 ? void 0 : opts.publicPath,
+        transformFilename: (_opts$transformFilena = opts === null || opts === void 0 ? void 0 : opts.transformFilename) !== null && _opts$transformFilena !== void 0 ? _opts$transformFilena : x => x,
+        schema: {
+          alt: (_opts$schema$alt = opts === null || opts === void 0 || (_opts$schema = opts.schema) === null || _opts$schema === void 0 ? void 0 : _opts$schema.alt) !== null && _opts$schema$alt !== void 0 ? _opts$schema$alt : defaultAltField,
+          title: (_opts$schema$title = opts === null || opts === void 0 || (_opts$schema2 = opts.schema) === null || _opts$schema2 === void 0 ? void 0 : _opts$schema2.title) !== null && _opts$schema$title !== void 0 ? _opts$schema$title : emptyTitleField
+        }
+      };
+    })() : undefined,
+    divider: (_options$divider = options.divider) !== null && _options$divider !== void 0 ? _options$divider : true,
+    codeBlock: options.codeBlock === false ? undefined : {
+      schema: typeof options.codeBlock === 'object' ? options.codeBlock.schema : {}
+    }
+  };
+}
+
+function getTypeForField(field) {
+  if (field.kind === 'object' || field.kind === 'conditional') {
+    return {
+      type: Object,
+      required: true
+    };
+  }
+  if (field.kind === 'array') {
+    return {
+      type: Array,
+      required: true
+    };
+  }
+  if (field.kind === 'child') {
+    return {};
+  }
+  if (field.formKind === undefined) {
+    if (typeof field.defaultValue === 'string' && 'options' in field && Array.isArray(field.options) && field.options.every(val => typeof val === 'object' && val !== null && 'value' in val && typeof val.value === 'string')) {
+      return {
+        type: String,
+        matches: field.options.map(x => x.value),
+        required: true
+      };
+    }
+    if (typeof field.defaultValue === 'string') {
+      let required = false;
+      try {
+        field.parse('');
+      } catch {
+        required = true;
+      }
+      return {
+        type: String,
+        required
+      };
+    }
+    try {
+      field.parse(1);
+      return {
+        type: Number
+      };
+    } catch {}
+    if (typeof field.defaultValue === 'boolean') {
+      return {
+        type: Boolean,
+        required: true
+      };
+    }
+    return {};
+  }
+  if (field.formKind === 'slug') {
+    let required = false;
+    try {
+      field.parse('', undefined);
+    } catch {
+      required = true;
+    }
+    return {
+      type: String,
+      required
+    };
+  }
+  if (field.formKind === 'asset') {
+    let required = false;
+    try {
+      field.validate(null);
+    } catch {
+      required = true;
+    }
+    return {
+      type: String,
+      required
+    };
+  }
+  return {};
+}
+function fieldsToMarkdocAttributes(fields) {
+  return Object.fromEntries(Object.entries(fields).map(([name, field]) => {
+    const schema = getTypeForField(field);
+    return [name, schema];
+  }));
+}
+function createMarkdocConfig(opts) {
+  const editorConfig = editorOptionsToConfig(opts.options || {});
+  const config = {
+    nodes: {
+      ...nodes
+    },
+    tags: {}
+  };
+  if (editorConfig.heading.levels.length) {
+    config.nodes.heading = {
+      ...nodes.heading,
+      attributes: {
+        ...nodes.heading.attributes,
+        ...fieldsToMarkdocAttributes(editorConfig.heading.schema)
+      }
+    };
+  } else {
+    config.nodes.heading = undefined;
+  }
+  if (!editorConfig.blockquote) {
+    config.nodes.blockquote = undefined;
+  }
+  if (editorConfig.codeBlock) {
+    config.nodes.fence = {
+      ...nodes.fence,
+      attributes: {
+        ...nodes.fence.attributes,
+        ...fieldsToMarkdocAttributes(editorConfig.codeBlock.schema)
+      }
+    };
+  } else {
+    config.nodes.fence = undefined;
+  }
+  if (!editorConfig.orderedList && !editorConfig.unorderedList) {
+    config.nodes.list = undefined;
+  }
+  if (!editorConfig.bold) {
+    config.nodes.strong = undefined;
+  }
+  if (!editorConfig.italic) {
+    config.nodes.em = undefined;
+  }
+  if (!editorConfig.strikethrough) {
+    config.nodes.s = undefined;
+  }
+  if (!editorConfig.link) {
+    config.nodes.link = undefined;
+  }
+  if (!editorConfig.image) {
+    config.nodes.image = undefined;
+  }
+  if (!editorConfig.divider) {
+    config.nodes.hr = undefined;
+  }
+  if (!editorConfig.table) {
+    config.nodes.table = undefined;
+  }
+  for (const [name, component] of Object.entries(opts.components || {})) {
+    var _opts$render;
+    const isEmpty = component.kind === 'block' || component.kind === 'inline';
+    config.tags[name] = {
+      render: (_opts$render = opts.render) === null || _opts$render === void 0 || (_opts$render = _opts$render.tags) === null || _opts$render === void 0 ? void 0 : _opts$render[name],
+      children: isEmpty ? [] : undefined,
+      selfClosing: isEmpty,
+      attributes: fieldsToMarkdocAttributes(component.schema),
+      description: 'description' in component ? component.description : undefined,
+      inline: component.kind === 'inline' || component.kind === 'mark'
+    };
+  }
+  for (const [name, render] of Object.entries(((_opts$render2 = opts.render) === null || _opts$render2 === void 0 ? void 0 : _opts$render2.nodes) || {})) {
+    var _opts$render2;
+    const nodeSchema = config.nodes[name];
+    if (nodeSchema) {
+      nodeSchema.render = render;
+    }
+  }
+  return config;
+}
+
+const textDecoder = new TextDecoder();
+const textEncoder = new TextEncoder();
+function getDirectoriesForEditorField(components, config) {
+  return [...collectDirectoriesUsedInSchema(object(Object.fromEntries(Object.entries(components).map(([name, component]) => [name, object(component.schema)])))), ...(typeof config.image === 'object' && typeof config.image.directory === 'string' ? [fixPath(config.image.directory)] : [])];
+}
+function markdoc({
+  label,
+  description,
+  options = {},
+  components = {},
+  extension = 'mdoc'
+}) {
+  let schema;
+  const config = editorOptionsToConfig(options);
+  let getSchema = () => {
+    if (!schema) {
+      schema = createEditorSchema();
+    }
+    return schema;
+  };
+  return {
+    kind: 'form',
+    formKind: 'content',
+    defaultValue() {
+      return getDefaultValue(getSchema());
+    },
+    Input(props) {
+      return /*#__PURE__*/jsx(DocumentFieldInput, {
+        description: description,
+        label: label,
+        ...props
+      });
+    },
+    parse: (_, {
+      content,
+      other,
+      external,
+      slug
+    }) => {
+      const text = textDecoder.decode(content);
+      return parseToEditorState(text, getSchema());
+    },
+    contentExtension: `.${extension}`,
+    validate(value) {
+      return value;
+    },
+    directories: getDirectoriesForEditorField(components, config),
+    serialize(value, {
+      slug
+    }) {
+      const out = serializeFromEditorState();
+      return {
+        content: textEncoder.encode(out.content),
+        external: out.external,
+        other: out.other,
+        value: undefined
+      };
+    },
+    reader: {
+      parse: (_, {
+        content
+      }) => {
+        const text = textDecoder.decode(content);
+        return {
+          node: parse(text)
+        };
+      }
+    },
+    collaboration: {
+      toYjs(value) {
+        return prosemirrorToYXmlFragment(value.doc);
+      },
+      fromYjs(yjsValue, awareness) {
+        return createEditorStateFromYJS(getSchema());
+      }
+    }
+  };
+}
+markdoc.createMarkdocConfig = createMarkdocConfig;
+markdoc.inline = function inlineMarkdoc({
+  label,
+  description,
+  options = {},
+  components = {}
+}) {
+  let schema;
+  const config = editorOptionsToConfig(options);
+  let getSchema = () => {
+    if (!schema) {
+      schema = createEditorSchema();
+    }
+    return schema;
+  };
+  return {
+    kind: 'form',
+    formKind: 'assets',
+    defaultValue() {
+      return getDefaultValue(getSchema());
+    },
+    Input(props) {
+      return /*#__PURE__*/jsx(DocumentFieldInput, {
+        description: description,
+        label: label,
+        ...props
+      });
+    },
+    parse: (value, {
+      other,
+      external,
+      slug
+    }) => {
+      if (value === undefined) {
+        value = '';
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      return parseToEditorState(value, getSchema());
+    },
+    validate(value) {
+      return value;
+    },
+    directories: getDirectoriesForEditorField(components, config),
+    serialize(value, {
+      slug
+    }) {
+      const out = serializeFromEditorState();
+      return {
+        external: out.external,
+        other: out.other,
+        value: out.content
+      };
+    },
+    reader: {
+      parse: value => {
+        if (value === undefined) {
+          value = '';
+        }
+        if (typeof value !== 'string') {
+          throw new FieldDataError('Must be a string');
+        }
+        return {
+          node: parse(value)
+        };
+      }
+    },
+    collaboration: {
+      toYjs(value) {
+        return prosemirrorToYXmlFragment(value.doc);
+      },
+      fromYjs(yjsValue, awareness) {
+        return createEditorStateFromYJS(getSchema());
+      }
+    }
+  };
+};
+function mdx({
+  label,
+  description,
+  options = {},
+  components = {},
+  extension = 'mdx'
+}) {
+  let schema;
+  const config = editorOptionsToConfig(options);
+  let getSchema = () => {
+    if (!schema) {
+      schema = createEditorSchema();
+    }
+    return schema;
+  };
+  return {
+    kind: 'form',
+    formKind: 'content',
+    defaultValue() {
+      return getDefaultValue(getSchema());
+    },
+    Input(props) {
+      return /*#__PURE__*/jsx(DocumentFieldInput, {
+        description: description,
+        label: label,
+        ...props
+      });
+    },
+    parse: (_, {
+      content,
+      other,
+      external,
+      slug
+    }) => {
+      const text = textDecoder.decode(content);
+      return parseToEditorStateMDX(text, getSchema());
+    },
+    contentExtension: `.${extension}`,
+    validate(value) {
+      return value;
+    },
+    directories: getDirectoriesForEditorField(components, config),
+    serialize(value, {
+      slug
+    }) {
+      const out = serializeFromEditorStateMDX();
+      return {
+        content: textEncoder.encode(out.content),
+        external: out.external,
+        other: out.other,
+        value: undefined
+      };
+    },
+    reader: {
+      parse: (_, {
+        content
+      }) => {
+        const text = textDecoder.decode(content);
+        return text;
+      }
+    },
+    collaboration: {
+      toYjs(value) {
+        return prosemirrorToYXmlFragment(value.doc);
+      },
+      fromYjs(yjsValue, awareness) {
+        return createEditorStateFromYJS(getSchema());
+      }
+    }
+  };
+}
+mdx.inline = function mdx({
+  label,
+  description,
+  options = {},
+  components = {}
+}) {
+  let schema;
+  const config = editorOptionsToConfig(options);
+  let getSchema = () => {
+    if (!schema) {
+      schema = createEditorSchema();
+    }
+    return schema;
+  };
+  return {
+    kind: 'form',
+    formKind: 'assets',
+    defaultValue() {
+      return getDefaultValue(getSchema());
+    },
+    Input(props) {
+      return /*#__PURE__*/jsx(DocumentFieldInput, {
+        description: description,
+        label: label,
+        ...props
+      });
+    },
+    parse: (value, {
+      other,
+      external,
+      slug
+    }) => {
+      if (value === undefined) {
+        value = '';
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      return parseToEditorStateMDX(value, getSchema());
+    },
+    validate(value) {
+      return value;
+    },
+    directories: getDirectoriesForEditorField(components, config),
+    serialize(value, {
+      slug
+    }) {
+      const out = serializeFromEditorStateMDX();
+      return {
+        external: out.external,
+        other: out.other,
+        value: out.content
+      };
+    },
+    reader: {
+      parse: value => {
+        if (value === undefined) {
+          value = '';
+        }
+        if (typeof value !== 'string') {
+          throw new FieldDataError('Must be a string');
+        }
+        return value;
+      }
+    },
+    collaboration: {
+      toYjs(value) {
+        return prosemirrorToYXmlFragment(value.doc);
+      },
+      fromYjs(yjsValue, awareness) {
+        return createEditorStateFromYJS(getSchema());
+      }
+    }
+  };
+};
+
+async function readDirEntries(dir) {
+  let entries;
+  try {
+    entries = await fs.readdir(dir, {
+      withFileTypes: true
+    });
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return [];
+    }
+    throw err;
+  }
+  return entries;
+}
+async function collectEntriesInDir(baseDir, ancestors) {
+  const currentRelativeDir = ancestors.map(p => p.segment).join('/');
+  const entries = await readDirEntries(path.join(baseDir, currentRelativeDir));
+  const gitignore = entries.find(entry => entry.isFile() && entry.name === '.gitignore');
+  const gitignoreFilterForDescendents = gitignore ? ignore().add(await fs.readFile(path.join(baseDir, currentRelativeDir, gitignore.name), 'utf8')).createFilter() : () => true;
+  const pathSegments = ancestors.map(x => x.segment);
+  return (await Promise.all(entries.filter(entry => {
+    if (!entry.isDirectory() && !entry.isFile() || entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.next') {
+      return false;
+    }
+    const innerPath = `${pathSegments.concat(entry.name).join('/')}${entry.isDirectory() ? '/' : ''}`;
+    if (!gitignoreFilterForDescendents(innerPath)) {
+      return false;
+    }
+    let currentPath = entry.name;
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      const ancestor = ancestors[i];
+      currentPath = `${ancestor.segment}/${currentPath}`;
+      if (!ancestor.gitignoreFilterForDescendents(currentPath)) {
+        return false;
+      }
+    }
+    return true;
+  }).map(async entry => {
+    if (entry.isDirectory()) {
+      return collectEntriesInDir(baseDir, [...ancestors, {
+        gitignoreFilterForDescendents,
+        segment: entry.name
+      }]);
+    } else {
+      const innerPath = pathSegments.concat(entry.name).join('/');
+      const contents = await fs.readFile(path.join(baseDir, innerPath));
+      return {
+        path: innerPath,
+        contents: {
+          byteLength: contents.byteLength,
+          sha: await blobSha(contents)
+        }
+      };
+    }
+  }))).flat();
+}
+async function readToDirEntries(baseDir) {
+  const additions = await collectEntriesInDir(baseDir, []);
+  const {
+    entries
+  } = await updateTreeWithChanges(new Map(), {
+    additions: additions,
+    deletions: []
+  });
+  return entries;
+}
+function getAllowedDirectories(config) {
+  const allowedDirectories = [];
+  for (const [collection, collectionConfig] of Object.entries((_config$collections = config.collections) !== null && _config$collections !== void 0 ? _config$collections : {})) {
+    var _config$collections;
+    allowedDirectories.push(...getDirectoriesForTreeKey(object(collectionConfig.schema), getCollectionPath(config, collection), undefined, {
+      data: 'yaml',
+      contentField: undefined,
+      dataLocation: 'index'
+    }));
+    if (collectionConfig.template) {
+      allowedDirectories.push(collectionConfig.template);
+    }
+  }
+  for (const [singleton, singletonConfig] of Object.entries((_config$singletons = config.singletons) !== null && _config$singletons !== void 0 ? _config$singletons : {})) {
+    var _config$singletons;
+    allowedDirectories.push(...getDirectoriesForTreeKey(object(singletonConfig.schema), getSingletonPath(config, singleton), undefined, getSingletonFormat(config, singleton)));
+  }
+  return [...new Set(allowedDirectories)];
+}
+
+function redirect(to, initialHeaders) {
+  return {
+    body: null,
+    status: 307,
+    headers: [...(initialHeaders !== null && initialHeaders !== void 0 ? initialHeaders : []), ['Location', to]]
+  };
+}
+
+function base64UrlDecode(base64) {
+  const binString = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(binString, m => m.codePointAt(0));
+}
+function base64UrlEncode(bytes) {
+  return base64Encode(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+function base64Encode(bytes) {
+  const binString = Array.from(bytes, byte => String.fromCodePoint(byte)).join('');
+  return btoa(binString);
+}
+
+const ghAppSchema = s.type({
+  slug: s.string(),
+  client_id: s.string(),
+  client_secret: s.string()
+});
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function handleGitHubAppCreation(req, slugEnvVarName) {
+  const searchParams = new URL(req.url, 'https://localhost').searchParams;
+  const code = searchParams.get('code');
+  if (typeof code !== 'string' || !/^[a-zA-Z0-9]+$/.test(code)) {
+    return {
+      status: 400,
+      body: 'Bad Request'
+    };
+  }
+  const ghAppRes = await fetch(`https://api.github.com/app-manifests/${code}/conversions`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json'
+    }
+  });
+  if (!ghAppRes.ok) {
+    console.log(ghAppRes);
+    return {
+      status: 500,
+      body: 'An error occurred while creating the GitHub App'
+    };
+  }
+  const ghAppDataRaw = await ghAppRes.json();
+  let ghAppDataResult;
+  try {
+    ghAppDataResult = s.create(ghAppDataRaw, ghAppSchema);
+  } catch {
+    console.log(ghAppDataRaw);
+    return {
+      status: 500,
+      body: 'An unexpected response was received from GitHub'
+    };
+  }
+  const toAddToEnv = `# Keystatic
+KEYSTATIC_GITHUB_CLIENT_ID=${ghAppDataResult.client_id}
+KEYSTATIC_GITHUB_CLIENT_SECRET=${ghAppDataResult.client_secret}
+KEYSTATIC_SECRET=${randomBytes(40).toString('hex')}
+${slugEnvVarName ? `${slugEnvVarName}=${ghAppDataResult.slug} # https://github.com/apps/${ghAppDataResult.slug}\n` : ''}`;
+  let prevEnv;
+  try {
+    prevEnv = await fs$1.readFile('.env', 'utf-8');
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const newEnv = prevEnv ? `${prevEnv}\n\n${toAddToEnv}` : toAddToEnv;
+  await fs$1.writeFile('.env', newEnv);
+  await wait(200);
+  return redirect('/keystatic/created-github-app?slug=' + ghAppDataResult.slug);
+}
+function localModeApiHandler(config, localBaseDirectory) {
+  const baseDirectory = path$1.resolve(localBaseDirectory !== null && localBaseDirectory !== void 0 ? localBaseDirectory : process.cwd());
+  return async (req, params) => {
+    const joined = params.join('/');
+    if (req.method === 'GET' && joined === 'tree') {
+      return tree(req, config, baseDirectory);
+    }
+    if (req.method === 'GET' && params[0] === 'blob') {
+      return blob(req, config, params, baseDirectory);
+    }
+    if (req.method === 'POST' && joined === 'update') {
+      return update(req, config, baseDirectory);
+    }
+    return {
+      status: 404,
+      body: 'Not Found'
+    };
+  };
+}
+async function tree(req, config, baseDirectory) {
+  if (req.headers.get('no-cors') !== '1') {
+    return {
+      status: 400,
+      body: 'Bad Request'
+    };
+  }
+  return {
+    status: 200,
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(await readToDirEntries(baseDirectory))
+  };
+}
+function getIsPathValid(config) {
+  const allowedDirectories = getAllowedDirectories(config);
+  return filepath => !filepath.includes('\\') && filepath.split('/').every(x => x !== '.' && x !== '..') && allowedDirectories.some(x => filepath.startsWith(x));
+}
+async function blob(req, config, params, baseDirectory) {
+  if (req.headers.get('no-cors') !== '1') {
+    return {
+      status: 400,
+      body: 'Bad Request'
+    };
+  }
+  const expectedSha = params[1];
+  const filepath = params.slice(2).join('/');
+  const isFilepathValid = getIsPathValid(config);
+  if (!isFilepathValid(filepath)) {
+    return {
+      status: 400,
+      body: 'Bad Request'
+    };
+  }
+  let contents;
+  try {
+    contents = await fs$1.readFile(path$1.join(baseDirectory, filepath));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return {
+        status: 404,
+        body: 'Not Found'
+      };
+    }
+    throw err;
+  }
+  const sha = await blobSha(contents);
+  if (sha !== expectedSha) {
+    return {
+      status: 404,
+      body: 'Not Found'
+    };
+  }
+  return {
+    status: 200,
+    body: contents
+  };
+}
+const base64Schema = s.coerce(s.instance(Uint8Array), s.string(), val => base64UrlDecode(val));
+async function update(req, config, baseDirectory) {
+  if (req.headers.get('no-cors') !== '1' || req.headers.get('content-type') !== 'application/json') {
+    return {
+      status: 400,
+      body: 'Bad Request'
+    };
+  }
+  const isFilepathValid = getIsPathValid(config);
+  const filepath = s.refine(s.string(), 'filepath', isFilepathValid);
+  let updates;
+  try {
+    updates = s.create(await req.json(), s.object({
+      additions: s.array(s.object({
+        path: filepath,
+        contents: base64Schema
+      })),
+      deletions: s.array(s.object({
+        path: filepath
+      }))
+    }));
+  } catch {
+    return {
+      status: 400,
+      body: 'Bad data'
+    };
+  }
+  for (const addition of updates.additions) {
+    await fs$1.mkdir(path$1.dirname(path$1.join(baseDirectory, addition.path)), {
+      recursive: true
+    });
+    await fs$1.writeFile(path$1.join(baseDirectory, addition.path), addition.contents);
+  }
+  for (const deletion of updates.deletions) {
+    await fs$1.rm(path$1.join(baseDirectory, deletion.path), {
+      force: true
+    });
+  }
+  return {
+    status: 200,
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(await readToDirEntries(baseDirectory))
+  };
+}
+
+function bytesToHex(bytes) {
+  let str = '';
+  for (const byte of bytes) {
+    str += byte.toString(16).padStart(2, '0');
+  }
+  return str;
+}
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+async function deriveKey(secret, salt) {
+  if (secret.length < 32) {
+    throw new Error('KEYSTATIC_SECRET must be at least 32 characters long');
+  }
+  const encoded = encoder.encode(secret);
+  const key = await webcrypto.subtle.importKey('raw', encoded, 'HKDF', false, ['deriveKey']);
+  return webcrypto.subtle.deriveKey({
+    name: 'HKDF',
+    salt,
+    hash: 'SHA-256',
+    info: new Uint8Array(0)
+  }, key, {
+    name: 'AES-GCM',
+    length: 256
+  }, false, ['encrypt', 'decrypt']);
+}
+const SALT_LENGTH = 16;
+const IV_LENGTH = 12;
+async function encryptValue(value, secret) {
+  const salt = webcrypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const iv = webcrypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const key = await deriveKey(secret, salt);
+  const encoded = encoder.encode(value);
+  const encrypted = await webcrypto.subtle.encrypt({
+    name: 'AES-GCM',
+    iv
+  }, key, encoded);
+  const full = new Uint8Array(SALT_LENGTH + IV_LENGTH + encrypted.byteLength);
+  full.set(salt);
+  full.set(iv, SALT_LENGTH);
+  full.set(new Uint8Array(encrypted), SALT_LENGTH + IV_LENGTH);
+  return base64UrlEncode(full);
+}
+async function decryptValue(encrypted, secret) {
+  const decoded = base64UrlDecode(encrypted);
+  const salt = decoded.slice(0, SALT_LENGTH);
+  const key = await deriveKey(secret, salt);
+  const iv = decoded.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
+  const value = decoded.slice(SALT_LENGTH + IV_LENGTH);
+  const decrypted = await webcrypto.subtle.decrypt({
+    name: 'AES-GCM',
+    iv
+  }, key, value);
+  return decoder.decode(decrypted);
+}
+
+const keystaticRouteRegex = /^branch\/[^]+(\/collection\/[^/]+(|\/(create|item\/[^/]+))|\/singleton\/[^/]+)?$/;
+const keyToEnvVar = {
+  clientId: 'KEYSTATIC_GITHUB_CLIENT_ID',
+  clientSecret: 'KEYSTATIC_GITHUB_CLIENT_SECRET',
+  secret: 'KEYSTATIC_SECRET'
+};
+function tryOrUndefined$1(fn) {
+  try {
+    return fn();
+  } catch {
+    return undefined;
+  }
+}
+function makeGenericAPIRouteHandler(_config, options) {
+  var _config$clientId, _config$clientSecret, _config$secret;
+  const _config2 = {
+    clientId: (_config$clientId = _config.clientId) !== null && _config$clientId !== void 0 ? _config$clientId : tryOrUndefined$1(() => process.env.KEYSTATIC_GITHUB_CLIENT_ID),
+    clientSecret: (_config$clientSecret = _config.clientSecret) !== null && _config$clientSecret !== void 0 ? _config$clientSecret : tryOrUndefined$1(() => process.env.KEYSTATIC_GITHUB_CLIENT_SECRET),
+    secret: (_config$secret = _config.secret) !== null && _config$secret !== void 0 ? _config$secret : tryOrUndefined$1(() => process.env.KEYSTATIC_SECRET),
+    config: _config.config
+  };
+  const getParams = req => {
+    let url;
+    try {
+      url = new URL(req.url);
+    } catch (err) {
+      throw new Error(`Found incomplete URL in Keystatic API route URL handler${(options === null || options === void 0 ? void 0 : options.slugEnvName) === 'NEXT_PUBLIC_KEYSTATIC_GITHUB_APP_SLUG' ? ". Make sure you're using the latest version of @keystatic/next" : ''}`);
+    }
+    return url.pathname.replace(/^\/api\/keystatic\/?/, '').split('/').map(x => decodeURIComponent(x)).filter(Boolean);
+  };
+  if (_config2.config.storage.kind === 'local') {
+    const handler = localModeApiHandler(_config2.config, _config.localBaseDirectory);
+    return req => {
+      const params = getParams(req);
+      return handler(req, params);
+    };
+  }
+  if (_config2.config.storage.kind === 'cloud') {
+    return async function keystaticAPIRoute() {
+      return {
+        status: 404,
+        body: 'Not Found'
+      };
+    };
+  }
+  if (!_config2.clientId || !_config2.clientSecret || !_config2.secret) {
+    if (process.env.NODE_ENV !== 'development') {
+      const missingKeys = ['clientId', 'clientSecret', 'secret'].filter(x => !_config2[x]);
+      throw new Error(`Missing required config in Keystatic API setup when using the 'github' storage mode:\n${missingKeys.map(key => `- ${key} (can be provided via ${keyToEnvVar[key]} env var)`).join('\n')}\n\nIf you've created your GitHub app locally, make sure to copy the environment variables from your local env file to your deployed environment`);
+    }
+    return async function keystaticAPIRoute(req) {
+      const params = getParams(req);
+      const joined = params.join('/');
+      if (joined === 'github/created-app') {
+        return createdGithubApp(req, options === null || options === void 0 ? void 0 : options.slugEnvName);
+      }
+      if (joined === 'github/login' || joined === 'github/repo-not-found' || joined === 'github/logout') {
+        return redirect('/keystatic/setup');
+      }
+      return {
+        status: 404,
+        body: 'Not Found'
+      };
+    };
+  }
+  const config = {
+    clientId: _config2.clientId,
+    clientSecret: _config2.clientSecret,
+    secret: _config2.secret,
+    config: _config2.config
+  };
+  return async function keystaticAPIRoute(req) {
+    const params = getParams(req);
+    const joined = params.join('/');
+    if (joined === 'github/oauth/callback') {
+      return githubOauthCallback(req, config);
+    }
+    if (joined === 'github/login') {
+      return githubLogin(req, config);
+    }
+    if (joined === 'github/refresh-token') {
+      return githubRefreshToken(req, config);
+    }
+    if (joined === 'github/repo-not-found') {
+      return githubRepoNotFound(req, config);
+    }
+    if (joined === 'github/logout') {
+      var _req$headers$get;
+      const cookies = cookie.parse((_req$headers$get = req.headers.get('cookie')) !== null && _req$headers$get !== void 0 ? _req$headers$get : '');
+      const access_token = cookies['keystatic-gh-access-token'];
+      if (access_token) {
+        await fetch(`https://api.github.com/applications/${config.clientId}/token`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Basic ${btoa(config.clientId + ':' + config.clientSecret)}`
+          },
+          body: JSON.stringify({
+            access_token
+          })
+        });
+      }
+      return redirect('/keystatic', [['Set-Cookie', immediatelyExpiringCookie('keystatic-gh-access-token')], ['Set-Cookie', immediatelyExpiringCookie('keystatic-gh-refresh-token')]]);
+    }
+    if (joined === 'github/created-app') {
+      return {
+        status: 404,
+        body: 'It looks like you just tried to create a GitHub App for Keystatic but there is already a GitHub App configured for Keystatic.\n\nYou may be here because you started creating a GitHub App but then started the process again elsewhere and completed it there. You should likely go back to Keystatic and sign in with GitHub to continue.'
+      };
+    }
+    return {
+      status: 404,
+      body: 'Not Found'
+    };
+  };
+}
+const tokenDataResultType = s.type({
+  access_token: s.string(),
+  expires_in: s.number(),
+  refresh_token: s.string(),
+  refresh_token_expires_in: s.number(),
+  scope: s.string(),
+  token_type: s.literal('bearer')
+});
+async function githubOauthCallback(req, config) {
+  var _req$headers$get2;
+  const searchParams = new URL(req.url, 'http://localhost').searchParams;
+  const error = searchParams.get('error');
+  const errorDescription = searchParams.get('error_description');
+  if (typeof errorDescription === 'string') {
+    return {
+      status: 400,
+      body: `An error occurred when trying to authenticate with GitHub:\n${errorDescription}${error === 'redirect_uri_mismatch' ? `\n\nIf you were trying to sign in locally and recently upgraded Keystatic from @keystatic/core@0.0.69 or below, you need to add \`http://127.0.0.1/api/keystatic/github/oauth/callback\` as a callback URL in your GitHub app.` : ''}`
+    };
+  }
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  if (typeof code !== 'string') {
+    return {
+      status: 400,
+      body: 'Bad Request'
+    };
+  }
+  const cookies = cookie.parse((_req$headers$get2 = req.headers.get('cookie')) !== null && _req$headers$get2 !== void 0 ? _req$headers$get2 : '');
+  const fromCookie = state ? cookies['ks-' + state] : undefined;
+  const from = typeof fromCookie === 'string' && keystaticRouteRegex.test(fromCookie) ? fromCookie : undefined;
+  const url = new URL('https://github.com/login/oauth/access_token');
+  url.searchParams.set('client_id', config.clientId);
+  url.searchParams.set('client_secret', config.clientSecret);
+  url.searchParams.set('code', code);
+  const tokenRes = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json'
+    }
+  });
+  if (!tokenRes.ok) {
+    return {
+      status: 401,
+      body: 'Authorization failed'
+    };
+  }
+  const _tokenData = await tokenRes.json();
+  let tokenData;
+  try {
+    tokenData = tokenDataResultType.create(_tokenData);
+  } catch {
+    return {
+      status: 401,
+      body: 'Authorization failed'
+    };
+  }
+  const headers = await getTokenCookies(tokenData, config);
+  if (state === 'close') {
+    return {
+      headers: [...headers, ['Content-Type', 'text/html']],
+      body: "<script>localStorage.setItem('ks-refetch-installations', 'true');window.close();</script>",
+      status: 200
+    };
+  }
+  return redirect(`/keystatic${from ? `/${from}` : ''}`, headers);
+}
+async function getTokenCookies(tokenData, config) {
+  const headers = [['Set-Cookie', cookie.serialize('keystatic-gh-access-token', tokenData.access_token, {
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: tokenData.expires_in,
+    expires: new Date(Date.now() + tokenData.expires_in * 1000),
+    path: '/'
+  })], ['Set-Cookie', cookie.serialize('keystatic-gh-refresh-token', await encryptValue(tokenData.refresh_token, config.secret), {
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: tokenData.refresh_token_expires_in,
+    expires: new Date(Date.now() + tokenData.refresh_token_expires_in * 100),
+    path: '/'
+  })]];
+  return headers;
+}
+async function getRefreshToken(req, config) {
+  const cookies = cookie.parse(req.headers.get('cookie') || '');
+  const refreshTokenCookie = cookies['keystatic-gh-refresh-token'];
+  if (!refreshTokenCookie) return;
+  let refreshToken;
+  try {
+    refreshToken = await decryptValue(refreshTokenCookie, config.secret);
+  } catch {
+    return;
+  }
+  return refreshToken;
+}
+async function githubRefreshToken(req, config) {
+  const headers = await refreshGitHubAuth(req, config);
+  if (!headers) {
+    return {
+      status: 401,
+      body: 'Authorization failed'
+    };
+  }
+  return {
+    status: 200,
+    headers,
+    body: ''
+  };
+}
+async function refreshGitHubAuth(req, config) {
+  const refreshToken = await getRefreshToken(req, config);
+  if (!refreshToken) {
+    return;
+  }
+  const url = new URL('https://github.com/login/oauth/access_token');
+  url.searchParams.set('client_id', config.clientId);
+  url.searchParams.set('client_secret', config.clientSecret);
+  url.searchParams.set('grant_type', 'refresh_token');
+  url.searchParams.set('refresh_token', refreshToken);
+  const tokenRes = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json'
+    }
+  });
+  if (!tokenRes.ok) {
+    return;
+  }
+  const _tokenData = await tokenRes.json();
+  let tokenData;
+  try {
+    tokenData = tokenDataResultType.create(_tokenData);
+  } catch {
+    return;
+  }
+  return getTokenCookies(tokenData, config);
+}
+async function githubRepoNotFound(req, config) {
+  const headers = await refreshGitHubAuth(req, config);
+  if (headers) {
+    return redirect('/keystatic/repo-not-found', headers);
+  }
+  return githubLogin(req, config);
+}
+async function githubLogin(req, config) {
+  const reqUrl = new URL(req.url);
+  const rawFrom = reqUrl.searchParams.get('from');
+  const from = typeof rawFrom === 'string' && keystaticRouteRegex.test(rawFrom) ? rawFrom : '/';
+  const state = bytesToHex(webcrypto.getRandomValues(new Uint8Array(10)));
+  const url = new URL('https://github.com/login/oauth/authorize');
+  url.searchParams.set('client_id', config.clientId);
+  url.searchParams.set('redirect_uri', `${reqUrl.origin}/api/keystatic/github/oauth/callback`);
+  if (from === '/') {
+    return redirect(url.toString());
+  }
+  url.searchParams.set('state', state);
+  return redirect(url.toString(), [['Set-Cookie', cookie.serialize('ks-' + state, from, {
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    // 1 day
+    maxAge: 60 * 60 * 24,
+    expires: new Date(Date.now() + 60 * 60 * 24 * 1000),
+    path: '/',
+    httpOnly: true
+  })]]);
+}
+async function createdGithubApp(req, slugEnvVarName) {
+  if (process.env.NODE_ENV !== 'development') {
+    return {
+      status: 400,
+      body: 'App setup only allowed in development'
+    };
+  }
+  return handleGitHubAppCreation(req, slugEnvVarName);
+}
+function immediatelyExpiringCookie(name) {
+  return cookie.serialize(name, '', {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+    expires: new Date()
+  });
+}
 
 function makeHandler(_config) {
   return async function keystaticAPIRoute(context) {
@@ -86,6 +2659,1294 @@ function tryOrUndefined(fn) {
   } catch {
     return void 0;
   }
+}
+
+function validateInteger(validation, value, label) {
+  if (value !== null && (typeof value !== 'number' || !Number.isInteger(value))) {
+    return `${label} must be a whole number`;
+  }
+  if (validation !== null && validation !== void 0 && validation.isRequired && value === null) {
+    return `${label} is required`;
+  }
+  if (value !== null) {
+    if ((validation === null || validation === void 0 ? void 0 : validation.min) !== undefined && value < validation.min) {
+      return `${label} must be at least ${validation.min}`;
+    }
+    if ((validation === null || validation === void 0 ? void 0 : validation.max) !== undefined && value > validation.max) {
+      return `${label} must be at most ${validation.max}`;
+    }
+  }
+}
+
+function integer({
+  label,
+  defaultValue,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(IntegerFieldInput, {
+        label: label,
+        description: description,
+        validation: validation,
+        ...props
+      });
+    },
+    defaultValue() {
+      return defaultValue !== null && defaultValue !== void 0 ? defaultValue : null;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value === 'number') {
+        return value;
+      }
+      throw new FieldDataError('Must be a number');
+    },
+    validate(value) {
+      const message = validateInteger(validation, value, label);
+      if (message !== undefined) {
+        throw new FieldDataError(message);
+      }
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value) {
+      return {
+        value: value === null ? undefined : value
+      };
+    }
+  });
+}
+
+// Common
+
+// Storage
+// ----------------------------------------------------------------------------
+
+// ============================================================================
+// Functions
+// ============================================================================
+
+function config$1(config) {
+  return config;
+}
+function collection(collection) {
+  return collection;
+}
+function singleton(collection) {
+  return collection;
+}
+
+function array(element, opts) {
+  var _opts$label;
+  return {
+    kind: 'array',
+    element,
+    label: (_opts$label = opts === null || opts === void 0 ? void 0 : opts.label) !== null && _opts$label !== void 0 ? _opts$label : 'Items',
+    description: opts === null || opts === void 0 ? void 0 : opts.description,
+    itemLabel: opts === null || opts === void 0 ? void 0 : opts.itemLabel,
+    asChildTag: opts === null || opts === void 0 ? void 0 : opts.asChildTag,
+    slugField: opts === null || opts === void 0 ? void 0 : opts.slugField,
+    validation: opts === null || opts === void 0 ? void 0 : opts.validation
+  };
+}
+
+function select({
+  label,
+  options,
+  defaultValue,
+  description
+}) {
+  const optionValuesSet = new Set(options.map(x => x.value));
+  if (!optionValuesSet.has(defaultValue)) {
+    throw new Error(`A defaultValue of ${defaultValue} was provided to a select field but it does not match the value of one of the options provided`);
+  }
+  const field = basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(SelectFieldInput, {
+        label: label,
+        options: options,
+        description: description,
+        ...props
+      });
+    },
+    defaultValue() {
+      return defaultValue;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return defaultValue;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      if (!optionValuesSet.has(value)) {
+        throw new FieldDataError('Must be a valid option');
+      }
+      return value;
+    },
+    validate(value) {
+      return value;
+    },
+    serialize(value) {
+      return {
+        value
+      };
+    }
+  });
+  return {
+    ...field,
+    options
+  };
+}
+
+function blocks(blocks, opts) {
+  const entries = Object.entries(blocks);
+  if (!entries.length) {
+    throw new Error('fields.blocks must have at least one entry');
+  }
+  const select$1 = select({
+    label: 'Kind',
+    defaultValue: entries[0][0],
+    options: Object.entries(blocks).map(([key, {
+      label
+    }]) => ({
+      label,
+      value: key
+    }))
+  });
+  const element = conditional(select$1, Object.fromEntries(entries.map(([key, {
+    schema
+  }]) => [key, schema])));
+  return {
+    ...array(element, {
+      label: opts.label,
+      description: opts.description,
+      validation: opts.validation,
+      itemLabel(props) {
+        const kind = props.discriminant;
+        const block = blocks[kind];
+        if (!block.itemLabel) return block.label;
+        return block.itemLabel(props.value);
+      }
+    }),
+    Input: BlocksFieldInput
+  };
+}
+
+function checkbox({
+  label,
+  defaultValue = false,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(CheckboxFieldInput, {
+        ...props,
+        label: label,
+        description: description
+      });
+    },
+    defaultValue() {
+      return defaultValue;
+    },
+    parse(value) {
+      if (value === undefined) return defaultValue;
+      if (typeof value !== 'boolean') {
+        throw new FieldDataError('Must be a boolean');
+      }
+      return value;
+    },
+    validate(value) {
+      return value;
+    },
+    serialize(value) {
+      return {
+        value
+      };
+    }
+  });
+}
+
+function child(options) {
+  return {
+    kind: 'child',
+    options: options.kind === 'block' ? {
+      ...options,
+      dividers: options.dividers,
+      formatting: options.formatting === 'inherit' ? {
+        blockTypes: 'inherit',
+        headingLevels: 'inherit',
+        inlineMarks: 'inherit',
+        listTypes: 'inherit',
+        alignment: 'inherit',
+        softBreaks: 'inherit'
+      } : options.formatting,
+      links: options.links,
+      images: options.images,
+      tables: options.tables,
+      componentBlocks: options.componentBlocks
+    } : {
+      kind: 'inline',
+      placeholder: options.placeholder,
+      formatting: options.formatting === 'inherit' ? {
+        inlineMarks: 'inherit',
+        softBreaks: 'inherit'
+      } : options.formatting,
+      links: options.links
+    }
+  };
+}
+
+function cloudImage({
+  label,
+  description,
+  validation
+}) {
+  return {
+    ...object({
+      src: text({
+        label: 'URL',
+        validation: {
+          length: {
+            min: validation !== null && validation !== void 0 && validation.isRequired ? 1 : 0
+          }
+        }
+      }),
+      alt: text({
+        label: 'Alt text'
+      }),
+      height: integer({
+        label: 'Height'
+      }),
+      width: integer({
+        label: 'Width'
+      })
+    }, {
+      label,
+      description
+    }),
+    Input(props) {
+      return /*#__PURE__*/jsx(CloudImageFieldInput, {
+        ...props,
+        isRequired: validation === null || validation === void 0 ? void 0 : validation.isRequired
+      });
+    }
+  };
+}
+
+function conditional(discriminant, values) {
+  return {
+    kind: 'conditional',
+    discriminant,
+    values: values
+  };
+}
+
+function validateDate(validation, value, label) {
+  if (value !== null && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${label} is not a valid date`;
+  }
+  if (validation !== null && validation !== void 0 && validation.isRequired && value === null) {
+    return `${label} is required`;
+  }
+  if ((validation !== null && validation !== void 0 && validation.min || validation !== null && validation !== void 0 && validation.max) && value !== null) {
+    const date = new Date(value);
+    if ((validation === null || validation === void 0 ? void 0 : validation.min) !== undefined) {
+      const min = new Date(validation.min);
+      if (date < min) {
+        return `${label} must be after ${min.toLocaleDateString()}`;
+      }
+    }
+    if ((validation === null || validation === void 0 ? void 0 : validation.max) !== undefined) {
+      const max = new Date(validation.max);
+      if (date > max) {
+        return `${label} must be no later than ${max.toLocaleDateString()}`;
+      }
+    }
+  }
+}
+
+function date({
+  label,
+  defaultValue,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(DateFieldInput, {
+        validation: validation,
+        label: label,
+        description: description,
+        ...props
+      });
+    },
+    defaultValue() {
+      if (defaultValue === undefined) {
+        return null;
+      }
+      if (typeof defaultValue === 'string') {
+        return defaultValue;
+      }
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (value instanceof Date) {
+        const year = value.getUTCFullYear();
+        const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(value.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      return value;
+    },
+    serialize(value) {
+      if (value === null) return {
+        value: undefined
+      };
+      const date = new Date(value);
+      date.toISOString = () => value;
+      date.toString = () => value;
+      return {
+        value: date
+      };
+    },
+    validate(value) {
+      const message = validateDate(validation, value, label);
+      if (message !== undefined) {
+        throw new FieldDataError(message);
+      }
+      assertRequired(value, validation, label);
+      return value;
+    }
+  });
+}
+
+function validateDatetime(validation, value, label) {
+  if (value !== null && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+    return `${label} is not a valid datetime`;
+  }
+  if (validation !== null && validation !== void 0 && validation.isRequired && value === null) {
+    return `${label} is required`;
+  }
+  if ((validation !== null && validation !== void 0 && validation.min || validation !== null && validation !== void 0 && validation.max) && value !== null) {
+    const datetime = new Date(value);
+    if ((validation === null || validation === void 0 ? void 0 : validation.min) !== undefined) {
+      const min = new Date(validation.min);
+      if (datetime < min) {
+        return `${label} must be after ${min.toISOString()}`;
+      }
+    }
+    if ((validation === null || validation === void 0 ? void 0 : validation.max) !== undefined) {
+      const max = new Date(validation.max);
+      if (datetime > max) {
+        return `${label} must be no later than ${max.toISOString()}`;
+      }
+    }
+  }
+}
+
+function datetime({
+  label,
+  defaultValue,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(DatetimeFieldInput, {
+        validation: validation,
+        label: label,
+        description: description,
+        ...props
+      });
+    },
+    defaultValue() {
+      if (defaultValue === undefined) {
+        return null;
+      }
+      if (typeof defaultValue === 'string') {
+        return defaultValue;
+      }
+      if (defaultValue.kind === 'now') {
+        const now = new Date();
+        return new Date(now.getTime() - now.getTimezoneOffset() * 60 * 1000).toISOString().slice(0, -8);
+      }
+      return null;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (value instanceof Date) {
+        return value.toISOString().slice(0, -8);
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string or date');
+      }
+      return value;
+    },
+    serialize(value) {
+      if (value === null) return {
+        value: undefined
+      };
+      const date = new Date(value + 'Z');
+      date.toJSON = () => date.toISOString().slice(0, -8);
+      date.toString = () => date.toISOString().slice(0, -8);
+      return {
+        value: date
+      };
+    },
+    validate(value) {
+      const message = validateDatetime(validation, value, label);
+      if (message !== undefined) {
+        throw new FieldDataError(message);
+      }
+      assertRequired(value, validation, label);
+      return value;
+    }
+  });
+}
+
+function empty() {
+  return basicFormFieldWithSimpleReaderParse({
+    Input() {
+      return null;
+    },
+    defaultValue() {
+      return null;
+    },
+    parse() {
+      return null;
+    },
+    serialize() {
+      return {
+        value: undefined
+      };
+    },
+    validate(value) {
+      return value;
+    },
+    label: 'Empty'
+  });
+}
+
+/**
+ * @deprecated `emptyDocument` has been replaced with the `emptyContent` field
+ */
+function emptyDocument() {
+  return {
+    kind: 'form',
+    formKind: 'content',
+    Input() {
+      return null;
+    },
+    defaultValue() {
+      return null;
+    },
+    parse() {
+      return null;
+    },
+    contentExtension: '.mdoc',
+    serialize() {
+      return {
+        value: undefined,
+        content: new Uint8Array(),
+        external: new Map(),
+        other: new Map()
+      };
+    },
+    validate(value) {
+      return value;
+    },
+    reader: {
+      parse() {
+        return null;
+      }
+    }
+  };
+}
+
+function emptyContent(opts) {
+  return {
+    kind: 'form',
+    formKind: 'content',
+    Input() {
+      return null;
+    },
+    defaultValue() {
+      return null;
+    },
+    parse() {
+      return null;
+    },
+    contentExtension: `.${opts.extension}`,
+    serialize() {
+      return {
+        value: undefined,
+        content: new Uint8Array(),
+        external: new Map(),
+        other: new Map()
+      };
+    },
+    validate(value) {
+      return value;
+    },
+    reader: {
+      parse() {
+        return null;
+      }
+    }
+  };
+}
+
+function file({
+  label,
+  directory,
+  validation,
+  description,
+  publicPath,
+  transformFilename
+}) {
+  return {
+    kind: 'form',
+    formKind: 'asset',
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(FileFieldInput, {
+        label: label,
+        description: description,
+        validation: validation,
+        transformFilename: transformFilename,
+        ...props
+      });
+    },
+    defaultValue() {
+      return null;
+    },
+    filename(value, args) {
+      if (typeof value === 'string') {
+        return value.slice(getSrcPrefix(publicPath, args.slug).length);
+      }
+      return undefined;
+    },
+    parse(value, args) {
+      var _value$match$, _value$match;
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      if (args.asset === undefined) {
+        return null;
+      }
+      return {
+        data: args.asset,
+        filename: value.slice(getSrcPrefix(publicPath, args.slug).length),
+        extension: (_value$match$ = (_value$match = value.match(/\.([^.]+$)/)) === null || _value$match === void 0 ? void 0 : _value$match[1]) !== null && _value$match$ !== void 0 ? _value$match$ : ''
+      };
+    },
+    validate(value) {
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value, args) {
+      if (value === null) {
+        return {
+          value: undefined,
+          asset: undefined
+        };
+      }
+      const filename = args.suggestedFilenamePrefix ? args.suggestedFilenamePrefix + '.' + value.extension : value.filename;
+      return {
+        value: `${getSrcPrefix(publicPath, args.slug)}${filename}`,
+        asset: {
+          filename,
+          content: value.data
+        }
+      };
+    },
+    directory: directory ? fixPath(directory) : undefined,
+    reader: {
+      parse(value) {
+        if (typeof value !== 'string' && value !== undefined) {
+          throw new FieldDataError('Must be a string');
+        }
+        const val = value === undefined ? null : value;
+        assertRequired(val, validation, label);
+        return val;
+      }
+    }
+  };
+}
+
+function image({
+  label,
+  directory,
+  validation,
+  description,
+  publicPath,
+  transformFilename
+}) {
+  return {
+    kind: 'form',
+    formKind: 'asset',
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(ImageFieldInput, {
+        label: label,
+        description: description,
+        validation: validation,
+        transformFilename: transformFilename,
+        ...props
+      });
+    },
+    defaultValue() {
+      return null;
+    },
+    filename(value, args) {
+      if (typeof value === 'string') {
+        return value.slice(getSrcPrefix(publicPath, args.slug).length);
+      }
+      return undefined;
+    },
+    parse(value, args) {
+      var _value$match$, _value$match;
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      if (args.asset === undefined) {
+        return null;
+      }
+      return {
+        data: args.asset,
+        filename: value.slice(getSrcPrefix(publicPath, args.slug).length),
+        extension: (_value$match$ = (_value$match = value.match(/\.([^.]+$)/)) === null || _value$match === void 0 ? void 0 : _value$match[1]) !== null && _value$match$ !== void 0 ? _value$match$ : ''
+      };
+    },
+    validate(value) {
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value, args) {
+      if (value === null) {
+        return {
+          value: undefined,
+          asset: undefined
+        };
+      }
+      const filename = args.suggestedFilenamePrefix ? args.suggestedFilenamePrefix + '.' + value.extension : value.filename;
+      return {
+        value: `${getSrcPrefix(publicPath, args.slug)}${filename}`,
+        asset: {
+          filename,
+          content: value.data
+        }
+      };
+    },
+    directory: directory ? fixPath(directory) : undefined,
+    reader: {
+      parse(value) {
+        if (typeof value !== 'string' && value !== undefined) {
+          throw new FieldDataError('Must be a string');
+        }
+        const val = value === undefined ? null : value;
+        assertRequired(val, validation, label);
+        return val;
+      }
+    }
+  };
+}
+
+function pluralize(count, options) {
+  const {
+    singular,
+    plural = singular + 's',
+    inclusive = true
+  } = options;
+  const variant = count === 1 ? singular : plural;
+  return inclusive ? `${count} ${variant}` : variant;
+}
+
+function validateMultiRelationshipLength(validation, value) {
+  var _validation$length$mi, _validation$length, _validation$length$ma, _validation$length2;
+  const minLength = (_validation$length$mi = validation === null || validation === void 0 || (_validation$length = validation.length) === null || _validation$length === void 0 ? void 0 : _validation$length.min) !== null && _validation$length$mi !== void 0 ? _validation$length$mi : 0;
+  if (value.length < minLength) {
+    return `Must have at least ${pluralize(minLength, {
+      singular: 'item'
+    })}.`;
+  }
+  const maxLength = (_validation$length$ma = validation === null || validation === void 0 || (_validation$length2 = validation.length) === null || _validation$length2 === void 0 ? void 0 : _validation$length2.max) !== null && _validation$length$ma !== void 0 ? _validation$length$ma : Infinity;
+  if (value.length > maxLength) {
+    return `Must have at most ${pluralize(maxLength, {
+      singular: 'item'
+    })}.`;
+  }
+}
+
+function multiRelationship({
+  label,
+  collection,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(MultiRelationshipInput, {
+        label: label,
+        collection: collection,
+        description: description,
+        validation: validation,
+        ...props
+      });
+    },
+    defaultValue() {
+      return [];
+    },
+    parse(value) {
+      if (value === undefined) {
+        return [];
+      }
+      if (!Array.isArray(value) || !value.every(isString)) {
+        throw new FieldDataError('Must be an array of strings');
+      }
+      return value;
+    },
+    validate(value) {
+      const error = validateMultiRelationshipLength(validation, value);
+      if (error) {
+        throw new FieldDataError(error);
+      }
+      return value;
+    },
+    serialize(value) {
+      return {
+        value
+      };
+    }
+  });
+}
+
+function multiselect({
+  label,
+  options,
+  defaultValue = [],
+  description
+}) {
+  const valuesToOption = new Map(options.map(x => [x.value, x]));
+  const field = basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(MultiselectFieldInput, {
+        label: label,
+        description: description,
+        options: options,
+        ...props
+      });
+    },
+    defaultValue() {
+      return defaultValue;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return [];
+      }
+      if (!Array.isArray(value)) {
+        throw new FieldDataError('Must be an array of options');
+      }
+      if (!value.every(x => typeof x === 'string' && valuesToOption.has(x))) {
+        throw new FieldDataError(`Must be an array with one of ${options.map(x => x.value).join(', ')}`);
+      }
+      return value;
+    },
+    validate(value) {
+      return value;
+    },
+    serialize(value) {
+      return {
+        value
+      };
+    }
+  });
+  return {
+    ...field,
+    options
+  };
+}
+
+function validateNumber(validation, value, step, label) {
+  if (value !== null && typeof value !== 'number') {
+    return `${label} must be a number`;
+  }
+  if (validation !== null && validation !== void 0 && validation.isRequired && value === null) {
+    return `${label} is required`;
+  }
+  if (value !== null) {
+    if ((validation === null || validation === void 0 ? void 0 : validation.min) !== undefined && value < validation.min) {
+      return `${label} must be at least ${validation.min}`;
+    }
+    if ((validation === null || validation === void 0 ? void 0 : validation.max) !== undefined && value > validation.max) {
+      return `${label} must be at most ${validation.max}`;
+    }
+    if (step !== undefined && (validation === null || validation === void 0 ? void 0 : validation.validateStep) !== undefined && !isAtStep(value, step)) {
+      return `${label} must be a multiple of ${step}`;
+    }
+  }
+}
+function decimalPlaces(value) {
+  const stringified = value.toString();
+  const indexOfDecimal = stringified.indexOf('.');
+  if (indexOfDecimal === -1) {
+    const indexOfE = stringified.indexOf('e-');
+    return indexOfE === -1 ? 0 : parseInt(stringified.slice(indexOfE + 2));
+  }
+  return stringified.length - indexOfDecimal - 1;
+}
+function isAtStep(value, step) {
+  const dc = Math.max(decimalPlaces(step), decimalPlaces(value));
+  const base = Math.pow(10, dc);
+  return value * base % (step * base) === 0;
+}
+
+function number({
+  label,
+  defaultValue,
+  step,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(NumberFieldInput, {
+        label: label,
+        description: description,
+        validation: validation,
+        step: step,
+        ...props
+      });
+    },
+    defaultValue() {
+      return defaultValue !== null && defaultValue !== void 0 ? defaultValue : null;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value === 'number') {
+        return value;
+      }
+      throw new FieldDataError('Must be a number');
+    },
+    validate(value) {
+      const message = validateNumber(validation, value, step, label);
+      if (message !== undefined) {
+        throw new FieldDataError(message);
+      }
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value) {
+      return {
+        value: value === null ? undefined : value
+      };
+    }
+  });
+}
+
+function pathReference({
+  label,
+  pattern,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(PathReferenceInput, {
+        label: label,
+        pattern: pattern,
+        description: description,
+        validation: validation,
+        ...props
+      });
+    },
+    defaultValue() {
+      return null;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      return value;
+    },
+    validate(value) {
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value) {
+      return {
+        value: value === null ? undefined : value
+      };
+    }
+  });
+}
+
+function relationship({
+  label,
+  collection,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(RelationshipInput, {
+        label: label,
+        collection: collection,
+        description: description,
+        validation: validation,
+        ...props
+      });
+    },
+    defaultValue() {
+      return null;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      return value;
+    },
+    validate(value) {
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value) {
+      return {
+        value: value === null ? undefined : value
+      };
+    }
+  });
+}
+
+function parseSlugFieldAsNormalField(value) {
+  if (value === undefined) {
+    return {
+      name: '',
+      slug: ''
+    };
+  }
+  if (typeof value !== 'object') {
+    throw new FieldDataError('Must be an object');
+  }
+  if (Object.keys(value).length !== 2) {
+    throw new FieldDataError('Unexpected keys');
+  }
+  if (!('name' in value) || !('slug' in value)) {
+    throw new FieldDataError('Missing name or slug');
+  }
+  if (typeof value.name !== 'string') {
+    throw new FieldDataError('name must be a string');
+  }
+  if (typeof value.slug !== 'string') {
+    throw new FieldDataError('slug must be a string');
+  }
+  return {
+    name: value.name,
+    slug: value.slug
+  };
+}
+function parseAsSlugField(value, slug) {
+  if (value === undefined) {
+    return {
+      name: '',
+      slug
+    };
+  }
+  if (typeof value !== 'string') {
+    throw new FieldDataError('Must be a string');
+  }
+  return {
+    name: value,
+    slug
+  };
+}
+function slug(_args) {
+  var _args$name$validation, _args$name$validation2, _args$name$validation3, _args$name$validation4, _args$name$validation5, _args$slug;
+  const args = {
+    ..._args,
+    name: {
+      ..._args.name,
+      validation: {
+        pattern: (_args$name$validation = _args.name.validation) === null || _args$name$validation === void 0 ? void 0 : _args$name$validation.pattern,
+        length: {
+          min: Math.max((_args$name$validation2 = _args.name.validation) !== null && _args$name$validation2 !== void 0 && _args$name$validation2.isRequired ? 1 : 0, (_args$name$validation3 = (_args$name$validation4 = _args.name.validation) === null || _args$name$validation4 === void 0 || (_args$name$validation4 = _args$name$validation4.length) === null || _args$name$validation4 === void 0 ? void 0 : _args$name$validation4.min) !== null && _args$name$validation3 !== void 0 ? _args$name$validation3 : 0),
+          max: (_args$name$validation5 = _args.name.validation) === null || _args$name$validation5 === void 0 || (_args$name$validation5 = _args$name$validation5.length) === null || _args$name$validation5 === void 0 ? void 0 : _args$name$validation5.max
+        }
+      }
+    }
+  };
+  const naiveGenerateSlug = ((_args$slug = args.slug) === null || _args$slug === void 0 ? void 0 : _args$slug.generate) || slugify;
+  let _defaultValue;
+  function defaultValue() {
+    if (!_defaultValue) {
+      var _args$name$defaultVal, _args$name$defaultVal2;
+      _defaultValue = {
+        name: (_args$name$defaultVal = args.name.defaultValue) !== null && _args$name$defaultVal !== void 0 ? _args$name$defaultVal : '',
+        slug: naiveGenerateSlug((_args$name$defaultVal2 = args.name.defaultValue) !== null && _args$name$defaultVal2 !== void 0 ? _args$name$defaultVal2 : '')
+      };
+    }
+    return _defaultValue;
+  }
+  function validate(value, {
+    slugField
+  } = {
+    slugField: undefined
+  }) {
+    var _args$name$validation6, _args$name$validation7, _args$name$validation8, _args$name$validation9, _args$name$validation10, _args$slug$validation, _args$slug2, _args$slug$validation2, _args$slug3, _args$slug$label, _args$slug4, _args$slug5;
+    const nameMessage = validateText(value.name, (_args$name$validation6 = (_args$name$validation7 = args.name.validation) === null || _args$name$validation7 === void 0 || (_args$name$validation7 = _args$name$validation7.length) === null || _args$name$validation7 === void 0 ? void 0 : _args$name$validation7.min) !== null && _args$name$validation6 !== void 0 ? _args$name$validation6 : 0, (_args$name$validation8 = (_args$name$validation9 = args.name.validation) === null || _args$name$validation9 === void 0 || (_args$name$validation9 = _args$name$validation9.length) === null || _args$name$validation9 === void 0 ? void 0 : _args$name$validation9.max) !== null && _args$name$validation8 !== void 0 ? _args$name$validation8 : Infinity, args.name.label, undefined, (_args$name$validation10 = args.name.validation) === null || _args$name$validation10 === void 0 ? void 0 : _args$name$validation10.pattern);
+    if (nameMessage !== undefined) {
+      throw new FieldDataError(nameMessage);
+    }
+    const slugMessage = validateText(value.slug, (_args$slug$validation = (_args$slug2 = args.slug) === null || _args$slug2 === void 0 || (_args$slug2 = _args$slug2.validation) === null || _args$slug2 === void 0 || (_args$slug2 = _args$slug2.length) === null || _args$slug2 === void 0 ? void 0 : _args$slug2.min) !== null && _args$slug$validation !== void 0 ? _args$slug$validation : 1, (_args$slug$validation2 = (_args$slug3 = args.slug) === null || _args$slug3 === void 0 || (_args$slug3 = _args$slug3.validation) === null || _args$slug3 === void 0 || (_args$slug3 = _args$slug3.length) === null || _args$slug3 === void 0 ? void 0 : _args$slug3.max) !== null && _args$slug$validation2 !== void 0 ? _args$slug$validation2 : Infinity, (_args$slug$label = (_args$slug4 = args.slug) === null || _args$slug4 === void 0 ? void 0 : _args$slug4.label) !== null && _args$slug$label !== void 0 ? _args$slug$label : 'Slug', slugField ? slugField : {
+      slugs: emptySet,
+      glob: '*'
+    }, (_args$slug5 = args.slug) === null || _args$slug5 === void 0 || (_args$slug5 = _args$slug5.validation) === null || _args$slug5 === void 0 ? void 0 : _args$slug5.pattern);
+    if (slugMessage !== undefined) {
+      throw new FieldDataError(slugMessage);
+    }
+    return value;
+  }
+  const emptySet = new Set();
+  return {
+    kind: 'form',
+    formKind: 'slug',
+    label: args.name.label,
+    Input(props) {
+      return /*#__PURE__*/jsx(SlugFieldInput, {
+        args: args,
+        naiveGenerateSlug: naiveGenerateSlug,
+        defaultValue: defaultValue(),
+        ...props
+      });
+    },
+    defaultValue,
+    parse(value, args) {
+      if ((args === null || args === void 0 ? void 0 : args.slug) !== undefined) {
+        return parseAsSlugField(value, args.slug);
+      }
+      return parseSlugFieldAsNormalField(value);
+    },
+    validate,
+    serialize(value) {
+      return {
+        value
+      };
+    },
+    serializeWithSlug(value) {
+      return {
+        value: value.name,
+        slug: value.slug
+      };
+    },
+    reader: {
+      parse(value) {
+        const parsed = parseSlugFieldAsNormalField(value);
+        return validate(parsed);
+      },
+      parseWithSlug(value, args) {
+        return validate(parseAsSlugField(value, args.slug), {
+          slugField: {
+            glob: args.glob,
+            slugs: emptySet
+          }
+        }).name;
+      }
+    }
+  };
+}
+
+function isValidURL(url) {
+  return url === sanitizeUrl(url);
+}
+
+function validateUrl(validation, value, label) {
+  if (value !== null && (typeof value !== 'string' || !isValidURL(value))) {
+    return `${label} is not a valid URL`;
+  }
+  if (validation !== null && validation !== void 0 && validation.isRequired && value === null) {
+    return `${label} is required`;
+  }
+}
+
+function url({
+  label,
+  defaultValue,
+  validation,
+  description
+}) {
+  return basicFormFieldWithSimpleReaderParse({
+    label,
+    Input(props) {
+      return /*#__PURE__*/jsx(UrlFieldInput, {
+        label: label,
+        description: description,
+        validation: validation,
+        ...props
+      });
+    },
+    defaultValue() {
+      return defaultValue || null;
+    },
+    parse(value) {
+      if (value === undefined) {
+        return null;
+      }
+      if (typeof value !== 'string') {
+        throw new FieldDataError('Must be a string');
+      }
+      return value === '' ? null : value;
+    },
+    validate(value) {
+      const message = validateUrl(validation, value, label);
+      if (message !== undefined) {
+        throw new FieldDataError(message);
+      }
+      assertRequired(value, validation, label);
+      return value;
+    },
+    serialize(value) {
+      return {
+        value: value === null ? undefined : value
+      };
+    }
+  });
+}
+
+function ignored() {
+  return {
+    kind: 'form',
+    Input() {
+      return null;
+    },
+    defaultValue() {
+      return {
+        value: undefined
+      };
+    },
+    parse(value) {
+      return {
+        value
+      };
+    },
+    serialize(value) {
+      return value;
+    },
+    validate(value) {
+      return value;
+    },
+    label: 'Ignored',
+    reader: {
+      parse(value) {
+        return value;
+      }
+    }
+  };
+}
+
+var index = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  array: array,
+  blocks: blocks,
+  checkbox: checkbox,
+  child: child,
+  cloudImage: cloudImage,
+  conditional: conditional,
+  date: date,
+  datetime: datetime,
+  document: document,
+  empty: empty,
+  emptyDocument: emptyDocument,
+  emptyContent: emptyContent,
+  file: file,
+  image: image,
+  integer: integer,
+  multiRelationship: multiRelationship,
+  multiselect: multiselect,
+  number: number,
+  object: object,
+  pathReference: pathReference,
+  relationship: relationship,
+  select: select,
+  slug: slug,
+  text: text,
+  url: url,
+  ignored: ignored,
+  mdx: mdx,
+  markdoc: markdoc
+});
+
+({
+  src: text({
+    label: 'URL',
+    validation: {
+      length: {
+        min: 1
+      }
+    }
+  }),
+  alt: text({
+    label: 'Alt text'
+  }),
+  height: integer({
+    label: 'Height'
+  }),
+  width: integer({
+    label: 'Width'
+  })
+});
+
+function wrapper(config) {
+  return {
+    kind: 'wrapper',
+    ...config
+  };
+}
+function block(config) {
+  return {
+    kind: 'block',
+    ...config
+  };
 }
 
 const IconList = [
@@ -481,8 +4342,8 @@ const config = config$1({
       path: "src/content/global/header",
       format: { data: "json" },
       schema: {
-        logo: fields.object({
-          imagePath: fields.image({
+        logo: index.object({
+          imagePath: index.image({
             label: "Logo",
             directory: "src/assets/global",
             publicPath: "/src/assets/global/",
@@ -490,12 +4351,12 @@ const config = config$1({
               isRequired: false
             }
           }),
-          title: fields.text({ label: "Title" })
+          title: index.text({ label: "Title" })
         }),
-        pages: fields.array(
-          fields.object({
-            title: fields.text({ label: "Title" }),
-            link: fields.text({ label: "Url" })
+        pages: index.array(
+          index.object({
+            title: index.text({ label: "Title" }),
+            link: index.text({ label: "Url" })
           }),
           // Labelling options
           {
@@ -503,11 +4364,11 @@ const config = config$1({
             itemLabel: (props) => props.fields.title.value
           }
         ),
-        actions: fields.array(
-          fields.object({
-            title: fields.text({ label: "Title" }),
-            link: fields.text({ label: "Url" }),
-            style: fields.select({
+        actions: index.array(
+          index.object({
+            title: index.text({ label: "Title" }),
+            link: index.text({ label: "Url" }),
+            style: index.select({
               label: "Style",
               options: [
                 { label: "Filled", value: "button" },
@@ -522,20 +4383,20 @@ const config = config$1({
             itemLabel: (props) => props.fields.title.value
           }
         ),
-        contacts: fields.object(
+        contacts: index.object(
           {
-            phone: fields.text({ label: "Phone" }),
-            mail: fields.text({ label: "Email" }),
-            address: fields.text({ label: "Address" })
+            phone: index.text({ label: "Phone" }),
+            mail: index.text({ label: "Email" }),
+            address: index.text({ label: "Address" })
           },
           {
             label: "Contacts"
           }
         ),
-        socials: fields.array(
-          fields.object({
-            icon: fields.text({ label: "Icon" }),
-            link: fields.text({ label: "Url" })
+        socials: index.array(
+          index.object({
+            icon: index.text({ label: "Icon" }),
+            link: index.text({ label: "Url" })
           }),
           {
             itemLabel: (props) => props.fields.link.value,
@@ -549,13 +4410,13 @@ const config = config$1({
       path: "src/content/global/widget",
       format: { data: "json" },
       schema: {
-        enabled: fields.checkbox({ label: "Abilita" }),
-        icon: fields.select({
+        enabled: index.checkbox({ label: "Abilita" }),
+        icon: index.select({
           label: "Icona",
           options: IconList,
           defaultValue: "whatsapp"
         }),
-        link: fields.url({ label: "Link" })
+        link: index.url({ label: "Link" })
       }
     }),
     footer: singleton({
@@ -563,18 +4424,18 @@ const config = config$1({
       path: "src/content/global/footer",
       format: { data: "json" },
       schema: {
-        title: fields.text({ label: "Title" }),
-        subtitle: fields.text({ label: "Subtitle" }),
-        copyright: fields.text({ label: "Copyright" }),
-        contacts: fields.object(
+        title: index.text({ label: "Title" }),
+        subtitle: index.text({ label: "Subtitle" }),
+        copyright: index.text({ label: "Copyright" }),
+        contacts: index.object(
           {
-            phone: fields.text({ label: "Phone" }),
-            mail: fields.text({ label: "Email" }),
-            socials: fields.array(
-              fields.object({
-                title: fields.text({ label: "Title" }),
-                link: fields.text({ label: "Url" }),
-                icon: fields.text({ label: "Icon" })
+            phone: index.text({ label: "Phone" }),
+            mail: index.text({ label: "Email" }),
+            socials: index.array(
+              index.object({
+                title: index.text({ label: "Title" }),
+                link: index.text({ label: "Url" }),
+                icon: index.text({ label: "Icon" })
               }),
               {
                 label: "Social",
@@ -599,7 +4460,7 @@ const config = config$1({
       previewUrl: "/{slug}",
       format: { contentField: "content" },
       schema: {
-        title: fields.slug({
+        title: index.slug({
           name: {
             label: "Title",
             description: "Titolo della pagina",
@@ -613,16 +4474,16 @@ const config = config$1({
             description: "Slug da usare per la pagina, attenzione, è consigliato non modificarlo dopo la pubblicazione."
           }
         }),
-        subtitle: fields.text({
+        subtitle: index.text({
           label: "Subtitle",
           multiline: true
         }),
-        cover: fields.image({
+        cover: index.image({
           label: "Cover Image",
           directory: "src/assets/pages",
           publicPath: "@/assets/pages/"
         }),
-        type: fields.select({
+        type: index.select({
           label: "Tipo pagina",
           options: [
             {
@@ -648,7 +4509,7 @@ const config = config$1({
           ],
           defaultValue: "informational"
         }),
-        lastUpdateDate: fields.date({
+        lastUpdateDate: index.date({
           label: "Last Update Date",
           description: "Data dell'ultimo aggiornamento della pagina",
           defaultValue: {
@@ -658,17 +4519,17 @@ const config = config$1({
             isRequired: true
           }
         }),
-        hideTitle: fields.checkbox({
+        hideTitle: index.checkbox({
           label: "Nascondi titolo",
           defaultValue: false
         }),
-        addPadding: fields.checkbox({
+        addPadding: index.checkbox({
           label: "Aggiungi padding",
           defaultValue: true
         }),
-        seo: fields.object(
+        seo: index.object(
           {
-            title: fields.text({
+            title: index.text({
               label: "Titolo SEO",
               validation: {
                 isRequired: true,
@@ -677,7 +4538,7 @@ const config = config$1({
                 }
               }
             }),
-            description: fields.text({
+            description: index.text({
               label: "Descrizione SEO",
               multiline: true,
               validation: {
@@ -687,7 +4548,7 @@ const config = config$1({
                 }
               }
             }),
-            author: fields.relationship({
+            author: index.relationship({
               label: "Author",
               description: "Autore della pagina",
               collection: "authors",
@@ -701,7 +4562,7 @@ const config = config$1({
             description: "Opzioni SEO per la pagina"
           }
         ),
-        content: fields.markdoc({
+        content: index.markdoc({
           label: "Content",
           options: {
             heading: [2, 3, 4, 5, 6],
@@ -716,7 +4577,7 @@ const config = config$1({
               icon: ContainerIcon({ ariaHidden: true }),
               description: "Contenitore che ti consente di agiungere del margine a destra e sinistra",
               schema: {
-                class: fields.text({
+                class: index.text({
                   label: "Classi custom"
                 })
               }
@@ -726,7 +4587,7 @@ const config = config$1({
               icon: ContainerFluidIcon({ ariaHidden: true }),
               description: "Contenitore che ti consente di avere del margine a destra e sinistra",
               schema: {
-                class: fields.text({
+                class: index.text({
                   label: "Classi custom"
                 })
               }
@@ -736,7 +4597,7 @@ const config = config$1({
               icon: ProseIcon({ ariaHidden: true }),
               description: "Contenitore di testo, ideale per blog o per contenuti informativi",
               schema: {
-                class: fields.text({
+                class: index.text({
                   label: "Classi custom"
                 })
               }
@@ -746,11 +4607,11 @@ const config = config$1({
               icon: FlexboxIcon({ ariaHidden: true }),
               description: "Contenitore flessibile",
               schema: {
-                class: fields.text({
+                class: index.text({
                   label: "Classi custom",
                   description: "Aggiungi classi personalizzate al contenitore"
                 }),
-                direction: fields.select({
+                direction: index.select({
                   label: "Direzione",
                   description: "Scegli la direzione del contenitore",
                   options: [
@@ -761,7 +4622,7 @@ const config = config$1({
                   ],
                   defaultValue: "ltr"
                 }),
-                verticalAlign: fields.select({
+                verticalAlign: index.select({
                   label: "Allineamento verticale",
                   description: "Scegli l'allineamento verticale del contenitore",
                   options: [
@@ -774,7 +4635,7 @@ const config = config$1({
                   ],
                   defaultValue: "top"
                 }),
-                horizontalAlign: fields.select({
+                horizontalAlign: index.select({
                   label: "Allineamento orizzontale",
                   description: "Scegli l'allineamento orizzontale del contenitore",
                   options: [
@@ -787,7 +4648,7 @@ const config = config$1({
                   ],
                   defaultValue: "left"
                 }),
-                itemsAlignment: fields.select({
+                itemsAlignment: index.select({
                   label: "Allineamento oggetti",
                   description: "Scegli l'allineamento degli oggetti all'interno del contenitore",
                   options: [
@@ -799,12 +4660,12 @@ const config = config$1({
                   ],
                   defaultValue: "start"
                 }),
-                gap: fields.number({
+                gap: index.number({
                   label: "Spaziatura",
                   description: "Scegli lo spazio tra gli oggetti",
                   defaultValue: 0
                 }),
-                wrap: fields.checkbox({
+                wrap: index.checkbox({
                   label: "Vai a capo",
                   description: "Scegli se andare a capo o meno quando non c'è più spazio nel contenitore",
                   defaultValue: false
@@ -816,23 +4677,23 @@ const config = config$1({
               description: "Sezione hero dell'homepage",
               icon: HeroIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                subtitle: fields.text({
+                subtitle: index.text({
                   label: "Subtitle",
                   validation: {
                     isRequired: true
                   }
                 }),
-                buttons: fields.array(
-                  fields.object({
-                    title: fields.text({ label: "Title" }),
-                    href: fields.text({ label: "Url" }),
-                    style: fields.select({
+                buttons: index.array(
+                  index.object({
+                    title: index.text({ label: "Title" }),
+                    href: index.text({ label: "Url" }),
+                    style: index.select({
                       label: "Style",
                       options: [
                         { label: "Filled", value: "button" },
@@ -840,7 +4701,7 @@ const config = config$1({
                       ],
                       defaultValue: "button"
                     }),
-                    icon: fields.text({ label: "Icona" })
+                    icon: index.text({ label: "Icona" })
                   }),
                   // Labelling options
                   {
@@ -855,14 +4716,14 @@ const config = config$1({
               description: "LogoCloud",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                logos: fields.array(
-                  fields.image({
+                logos: index.array(
+                  index.image({
                     label: "Logo",
                     directory: "src/assets/pages",
                     publicPath: "/src/assets/pages/"
@@ -878,17 +4739,17 @@ const config = config$1({
               description: "Services",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                services: fields.array(
-                  fields.object({
-                    title: fields.text({ label: "Title" }),
-                    description: fields.text({ label: "Description", multiline: true }),
-                    icon: fields.image({
+                services: index.array(
+                  index.object({
+                    title: index.text({ label: "Title" }),
+                    description: index.text({ label: "Description", multiline: true }),
+                    icon: index.image({
                       label: "Icona",
                       directory: "src/assets/pages",
                       publicPath: "/src/assets/pages/"
@@ -913,17 +4774,17 @@ const config = config$1({
               description: "RecentWork",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                buttons: fields.array(
-                  fields.object({
-                    title: fields.text({ label: "Title" }),
-                    href: fields.text({ label: "Url" }),
-                    style: fields.select({
+                buttons: index.array(
+                  index.object({
+                    title: index.text({ label: "Title" }),
+                    href: index.text({ label: "Url" }),
+                    style: index.select({
                       label: "Style",
                       options: [
                         { label: "Filled", value: "button" },
@@ -931,7 +4792,7 @@ const config = config$1({
                       ],
                       defaultValue: "button"
                     }),
-                    icon: fields.text({ label: "Icona" })
+                    icon: index.text({ label: "Icona" })
                   }),
                   // Labelling options
                   {
@@ -946,14 +4807,14 @@ const config = config$1({
               description: "Testimonial",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                testimonial: fields.text({
+                testimonial: index.text({
                   label: "Testimonial",
                   multiline: true,
                   validation: {
                     isRequired: true
                   }
                 }),
-                name: fields.text({
+                name: index.text({
                   label: "Name",
                   validation: {
                     isRequired: true
@@ -966,16 +4827,16 @@ const config = config$1({
               description: "Results",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                results: fields.array(
-                  fields.object({
-                    label: fields.text({ label: "Label" }),
-                    value: fields.text({ label: "Value" })
+                results: index.array(
+                  index.object({
+                    label: index.text({ label: "Label" }),
+                    value: index.text({ label: "Value" })
                   }),
                   // Labelling options
                   {
@@ -990,7 +4851,7 @@ const config = config$1({
               description: "BlogLatest",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
@@ -1003,19 +4864,19 @@ const config = config$1({
               description: "About section",
               icon: GeneralIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                subtitle: fields.text({
+                subtitle: index.text({
                   label: "Subtitle",
                   validation: {
                     isRequired: true
                   }
                 }),
-                content: fields.text({
+                content: index.text({
                   label: "Content",
                   multiline: true,
                   validation: {
@@ -1041,18 +4902,18 @@ const config = config$1({
               description: "Contact form section",
               icon: ContactIcon({ ariaHidden: true }),
               schema: {
-                title: fields.text({
+                title: index.text({
                   label: "Title",
                   validation: {
                     isRequired: true
                   }
                 }),
-                fields: fields.array(
-                  fields.object({
-                    label: fields.text({ label: "Label" }),
-                    placeholder: fields.text({ label: "Placeholder" }),
-                    width: fields.number({ label: "Width" }),
-                    type: fields.select({
+                fields: index.array(
+                  index.object({
+                    label: index.text({ label: "Label" }),
+                    placeholder: index.text({ label: "Placeholder" }),
+                    width: index.number({ label: "Width" }),
+                    type: index.select({
                       label: "Type",
                       options: [
                         { label: "Text", value: "text" },
@@ -1061,7 +4922,7 @@ const config = config$1({
                       ],
                       defaultValue: "text"
                     }),
-                    required: fields.checkbox({ label: "Required" })
+                    required: index.checkbox({ label: "Required" })
                   }),
                   {
                     label: "Fields",
@@ -1083,7 +4944,7 @@ const config = config$1({
       previewUrl: "/post/{slug}",
       format: { contentField: "content" },
       schema: {
-        title: fields.slug({
+        title: index.slug({
           name: {
             label: "Title",
             description: "Titolo del post",
@@ -1097,14 +4958,14 @@ const config = config$1({
             description: "Slug da usare per il post, attenzione, è consigliato non modificarlo dopo la pubblicazione."
           }
         }),
-        description: fields.text({
+        description: index.text({
           label: "Description",
           multiline: true,
           validation: {
             isRequired: true
           }
         }),
-        author: fields.relationship({
+        author: index.relationship({
           label: "Author",
           description: "Autore dell'articolo",
           collection: "authors",
@@ -1112,16 +4973,16 @@ const config = config$1({
             isRequired: true
           }
         }),
-        cover: fields.image({
+        cover: index.image({
           label: "Cover Image",
           directory: "src/assets/posts",
           publicPath: "@/assets/posts/"
         }),
-        tags: fields.array(fields.text({ label: "Tag" }), {
+        tags: index.array(index.text({ label: "Tag" }), {
           label: "Tag",
           itemLabel: (props) => props.value
         }),
-        pubDate: fields.date({
+        pubDate: index.date({
           label: "Publication Date",
           description: "Data di pubblicazione dell'articolo",
           defaultValue: {
@@ -1131,7 +4992,7 @@ const config = config$1({
             isRequired: true
           }
         }),
-        lastUpdateDate: fields.date({
+        lastUpdateDate: index.date({
           label: "Last Update Date",
           description: "Data dell'ultimo aggiornamento dell'articolo'",
           defaultValue: {
@@ -1141,10 +5002,10 @@ const config = config$1({
             isRequired: true
           }
         }),
-        hidden: fields.checkbox({
+        hidden: index.checkbox({
           label: "Hidden"
         }),
-        content: fields.markdoc({
+        content: index.markdoc({
           label: "Content",
           options: {
             heading: [2, 3, 4, 5, 6],
@@ -1166,7 +5027,7 @@ const config = config$1({
       previewUrl: "/works/{slug}",
       format: { contentField: "content" },
       schema: {
-        title: fields.slug({
+        title: index.slug({
           name: {
             label: "Title",
             description: "Titolo del post",
@@ -1180,29 +5041,29 @@ const config = config$1({
             description: "Slug da usare per il post, attenzione, è consigliato non modificarlo dopo la pubblicazione."
           }
         }),
-        link: fields.text({
+        link: index.text({
           label: "Link",
           validation: {
             isRequired: true
           }
         }),
-        description: fields.text({
+        description: index.text({
           label: "Description",
           multiline: true,
           validation: {
             isRequired: true
           }
         }),
-        tags: fields.array(fields.text({ label: "Tag" }), {
+        tags: index.array(index.text({ label: "Tag" }), {
           label: "Tag",
           itemLabel: (props) => props.value
         }),
-        cover: fields.image({
+        cover: index.image({
           label: "Cover Image",
           directory: "src/assets/works",
           publicPath: "@/assets/works/"
         }),
-        pubDate: fields.date({
+        pubDate: index.date({
           label: "Publication Date",
           description: "Data di pubblicazione dell'articolo",
           defaultValue: {
@@ -1212,7 +5073,7 @@ const config = config$1({
             isRequired: true
           }
         }),
-        lastUpdateDate: fields.date({
+        lastUpdateDate: index.date({
           label: "Last Update Date",
           description: "Data dell'ultimo aggiornamento dell'articolo'",
           defaultValue: {
@@ -1222,7 +5083,7 @@ const config = config$1({
             isRequired: true
           }
         }),
-        content: fields.markdoc({
+        content: index.markdoc({
           label: "Content",
           options: {
             heading: [2, 3, 4, 5, 6],
@@ -1243,7 +5104,7 @@ const config = config$1({
       previewUrl: "/author/{slug}",
       format: { contentField: "content" },
       schema: {
-        name: fields.slug({
+        name: index.slug({
           name: {
             label: "Name",
             description: "Author's full name",
@@ -1257,12 +5118,12 @@ const config = config$1({
             description: "This will define the file/folder name for this entry"
           }
         }),
-        avatar: fields.image({
+        avatar: index.image({
           label: "Immagine di profilo",
           directory: "src/assets/authors",
           publicPath: "@/assets/authors/"
         }),
-        content: fields.document({
+        content: index.document({
           label: "Content",
           formatting: true,
           dividers: true,

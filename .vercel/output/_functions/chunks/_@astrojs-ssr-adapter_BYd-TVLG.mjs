@@ -14,7 +14,7 @@ import { unflatten as unflatten$1, stringify as stringify$1 } from 'devalue';
 import { createStorage, builtinDrivers } from 'unstorage';
 import '@vercel/routing-utils';
 import 'deterministic-object-hash';
-import nodePath from 'node:path';
+import path from 'node:path';
 import { builtinModules } from 'node:module';
 
 function redirectIsExternal(redirect) {
@@ -3726,7 +3726,7 @@ function getRequestSocket(req) {
 
 apply();
 
-nodePath.posix.join;
+path.posix.join;
 
 new RegExp(
   builtinModules.map((mod) => `(^${mod}$|^node:${mod}$)`).join("|")
