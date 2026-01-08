@@ -1,5 +1,5 @@
 import alpinejs from "@astrojs/alpinejs";
-import cloudflare from "@astrojs/cloudflare";
+import vercel from "@astrojs/vercel";
 import markdoc from "@astrojs/markdoc";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -14,12 +14,8 @@ import { defaultLocale, locales, siteTitle, siteUrl } from "./site.config";
 // https://astro.build/config
 export default defineConfig({
 	site: siteUrl,
-	output: "hybrid",
-	adapter: cloudflare({
-		imageService: "compile",
-		experimental: {
-			manualChunks: ["sharp"],
-		},
+	adapter: vercel({
+		imageService: true,
 	}),
 	compressHTML: true,
 	i18n: {
@@ -43,7 +39,16 @@ export default defineConfig({
 			// Base style is applied on the file global.css
 			applyBaseStyles: false,
 		}),
-		sitemap(),
+		sitemap({
+			i18n: {
+				defaultLocale: defaultLocale,
+				locales: {
+					en: "en",
+					it: "it",
+				},
+			},
+			filter: (page) => !page.includes("/keystatic") && !page.includes("/api/"),
+		}),
 		icon(),
 		react(),
 		markdoc(),
@@ -51,36 +56,37 @@ export default defineConfig({
 		robotsTxt({
 			policy: [{ userAgent: "*", allow: "/" }],
 		}),
-		AstroPWA({
-			mode: import.meta.env.PROD ? "production" : "development",
-			base: "/",
-			scope: "/",
-			includeAssets: ["favicon.svg"],
-			registerType: "autoUpdate",
-			injectRegister: false,
-			manifest: {
-				name: siteTitle,
-				short_name: siteTitle,
-				theme_color: "#ffffff",
-			},
-			pwaAssets: {
-				config: true,
-			},
-			workbox: {
-				navigateFallback: "/",
-				globPatterns: ["**/*.{css,js,html,svg,png,ico,txt}"],
-				globIgnores: ["**/_worker.js/**/*", "_worker.js"],
-				navigateFallbackDenylist: [/^\/keystatic/, /^\/api/],
-				skipWaiting: true,
-				maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-			},
-			devOptions: {
-				enabled: false,
-				navigateFallbackAllowlist: [/^\//],
-			},
-			experimental: {
-				directoryAndTrailingSlashHandler: true,
-			},
-		}),
+		// PWA temporarily disabled for Vercel compatibility
+		// AstroPWA({
+		// 	mode: import.meta.env.PROD ? "production" : "development",
+		// 	base: "/",
+		// 	scope: "/",
+		// 	includeAssets: ["favicon.svg"],
+		// 	registerType: "autoUpdate",
+		// 	injectRegister: false,
+		// 	manifest: {
+		// 		name: siteTitle,
+		// 		short_name: siteTitle,
+		// 		theme_color: "#ffffff",
+		// 	},
+		// 	pwaAssets: {
+		// 		config: true,
+		// 	},
+		// 	workbox: {
+		// 		navigateFallback: "/",
+		// 		globPatterns: ["**/*.{css,js,html,svg,png,ico,txt}"],
+		// 		globIgnores: ["**/_worker.js/**/*", "_worker.js"],
+		// 		navigateFallbackDenylist: [/^\/keystatic/, /^\/api/],
+		// 		skipWaiting: true,
+		// 		maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+		// 	},
+		// 	devOptions: {
+		// 		enabled: false,
+		// 		navigateFallbackAllowlist: [/^\//],
+		// 	},
+		// 	experimental: {
+		// 		directoryAndTrailingSlashHandler: true,
+		// 	},
+		// }),
 	],
 });
