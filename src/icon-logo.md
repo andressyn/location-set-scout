@@ -1,0 +1,33 @@
+<svg
+  width="120"
+  height="160"
+  viewBox="0 0 120 160"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <mask id="pin-cutout">
+      <rect width="100%" height="100%" fill="white" />
+      <circle cx="60" cy="60" r="18" fill="black" />
+    </mask>
+  </defs>
+
+  <path
+    d="M60 10
+       C30 10 15 35 15 60
+       C15 95 60 150 60 150
+       Z"
+    fill="#df2021"
+    mask="url(#pin-cutout)"
+    transform="translate(-1, 0)"
+  />
+
+  <path
+    d="M60 10
+       C90 10 105 35 105 60
+       C105 95 60 150 60 150
+       Z"
+    fill="#df2021"
+    mask="url(#pin-cutout)"
+    transform="translate(1, 0)"
+  />
+</svg>
