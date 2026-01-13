@@ -500,23 +500,9 @@ export default config({
 						}),
 						Testimonial: block({
 							label: "Testimonial",
-							description: "Testimonial",
+							description: "Logo carousel showcasing brands we've worked with",
 							icon: GeneralIcon({ ariaHidden: true }),
-							schema: {
-								testimonial: fields.text({
-									label: "Testimonial",
-									multiline: true,
-									validation: {
-										isRequired: true,
-									},
-								}),
-								name: fields.text({
-									label: "Name",
-									validation: {
-										isRequired: true,
-									},
-								}),
-							},
+							schema: {},
 						}),
 						Results: block({
 							label: "Results",

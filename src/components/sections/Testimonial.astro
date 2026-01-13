@@ -1,28 +1,143 @@
 ---
 import { Image } from "astro:assets";
-import googleWhite from "@/assets/pages/homepage/google-white.png";
 
-interface Props {
-	testimonial: string;
-	name: string;
-}
+// Import all company logos
+import bell from "@/assets/pages/testimonial/bell.png";
+import budlight from "@/assets/pages/testimonial/budlight.png";
+import budweiser from "@/assets/pages/testimonial/budweiser.png";
+import cibc from "@/assets/pages/testimonial/cibc.png";
+import coinbase from "@/assets/pages/testimonial/coinbase.png";
+import hyundai from "@/assets/pages/testimonial/hyundai.png";
+import ikea from "@/assets/pages/testimonial/ikea.png";
+import jpwiser from "@/assets/pages/testimonial/jpwiser.png";
+import lg from "@/assets/pages/testimonial/lg.png";
+import manulife from "@/assets/pages/testimonial/manulife.png";
+import raptors from "@/assets/pages/testimonial/raptors.png";
+import skip from "@/assets/pages/testimonial/skip.png";
+import valvoline from "@/assets/pages/testimonial/valvoline.png";
+import visa from "@/assets/pages/testimonial/visa.png";
 
-const { testimonial, name } = Astro.props;
+const logos = [
+	{ src: bell, alt: "Bell" },
+	{ src: budlight, alt: "Bud Light" },
+	{ src: budweiser, alt: "Budweiser" },
+	{ src: cibc, alt: "CIBC" },
+	{ src: coinbase, alt: "Coinbase" },
+	{ src: hyundai, alt: "Hyundai" },
+	{ src: ikea, alt: "IKEA" },
+	{ src: jpwiser, alt: "J.P. Wiser's" },
+	{ src: lg, alt: "LG" },
+	{ src: manulife, alt: "Manulife" },
+	{ src: raptors, alt: "Toronto Raptors" },
+	{ src: skip, alt: "SkipTheDishes" },
+	{ src: valvoline, alt: "Valvoline" },
+	{ src: visa, alt: "Visa" },
+];
 ---
 
 <div class="text-sm font-medium pt-20 pb-14">
-	<div class="bg-black flex-grow py-20 px-16 rounded-3xl">
-		<div class="items-center flex-col justify-center text-center flex">
-			<Image
-				src={googleWhite}
-				alt="Google logo"
-				class="object-contain align-middle inline-block w-full h-10 max-w-[8.13rem] mb-8"
-			/>
-			<h2 class="text-white text-[2.13rem] leading-9 lg:max-w-[60%] mb-1">
-				"{testimonial}"
+	<div class="bg-black flex-grow py-16 px-8 lg:px-16 rounded-3xl overflow-hidden">
+		<div class="items-center flex-col justify-center text-center flex mb-12">
+			<h2 class="text-white text-2xl md:text-3xl lg:text-4xl leading-tight max-w-3xl font-bold mb-4">
+				Trusted by Industry <span class="accent-red">Leaders</span>
 			</h2>
-			<div class="bg-white/[0.9] w-12 h-0 my-8 m-auto mx-auto"></div>
-			<h3 class="text-white text-lg">{name}</h3>
+			<p class="text-white/70 mt-4 max-w-2xl text-base md:text-lg">
+				We've helped production teams find the perfect locations for campaigns with some of the world's most recognized brands.
+			</p>
+		</div>
+
+		<!-- Infinite Logo Carousel -->
+		<div class="logo-carousel relative">
+			<div class="logo-track flex items-center gap-12 md:gap-16 lg:gap-20">
+				{/* First set of logos */}
+				{logos.map((logo) => (
+					<div class="logo-item flex-shrink-0 w-24 md:w-32 lg:w-36 h-16 md:h-20 flex items-center justify-center opacity-70 hover:opacity-100 transition-opacity duration-300">
+						<Image
+							src={logo.src}
+							alt={logo.alt}
+							class="object-contain w-full h-full max-h-12 md:max-h-16 brightness-0 invert"
+						/>
+					</div>
+				))}
+				{/* Duplicate set for seamless loop */}
+				{logos.map((logo) => (
+					<div class="logo-item flex-shrink-0 w-24 md:w-32 lg:w-36 h-16 md:h-20 flex items-center justify-center opacity-70 hover:opacity-100 transition-opacity duration-300">
+						<Image
+							src={logo.src}
+							alt={logo.alt}
+							class="object-contain w-full h-full max-h-12 md:max-h-16 brightness-0 invert"
+						/>
+					</div>
+				))}
+			</div>
 		</div>
 	</div>
 </div>
+
+<style>
+	.logo-carousel {
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			black 10%,
+			black 90%,
+			transparent
+		);
+		-webkit-mask-image: linear-gradient(
+			to right,
+			transparent,
+			black 10%,
+			black 90%,
+			transparent
+		);
+	}
+</style>
+
+<script>
+	import gsap from "gsap";
+
+	function initLogoCarousel() {
+		const track = document.querySelector(".logo-track");
+		if (!track) return;
+
+		const logos = track.querySelectorAll(".logo-item");
+		const logoCount = logos.length / 2; // We have duplicated logos
+
+		// Calculate the width of one set of logos
+		const singleSetWidth = Array.from(logos)
+			.slice(0, logoCount)
+			.reduce((width, logo) => {
+				const style = getComputedStyle(logo);
+				const marginRight = parseFloat(style.marginRight) || 0;
+				const gap = 80; // Approximate gap value
+				return width + (logo as HTMLElement).offsetWidth + gap;
+			}, 0);
+
+		// Create infinite scroll animation
+		gsap.to(track, {
+			x: -singleSetWidth,
+			duration: 30,
+			ease: "none",
+			repeat: -1,
+			modifiers: {
+				x: gsap.utils.unitize((x) => parseFloat(x) % singleSetWidth),
+			},
+		});
+
+		// Pause on hover
+		const carousel = document.querySelector(".logo-carousel");
+		if (carousel) {
+			carousel.addEventListener("mouseenter", () => {
+				gsap.to(track, { timeScale: 0.3, duration: 0.5 });
+			});
+			carousel.addEventListener("mouseleave", () => {
+				gsap.to(track, { timeScale: 1, duration: 0.5 });
+			});
+		}
+	}
+
+	// Initialize on page load
+	document.addEventListener("DOMContentLoaded", initLogoCarousel);
+	// Re-initialize on Astro page transitions
+	document.addEventListener("astro:page-load", initLogoCarousel);
+</script>

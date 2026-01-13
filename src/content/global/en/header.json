@@ -12,6 +12,10 @@
 			"link": "/about"
 		},
 		{
+			"title": "Services",
+			"link": "/services"
+		},
+		{
 			"title": "Works",
 			"link": "/works"
 		},
@@ -20,7 +24,7 @@
 			"link": "/news"
 		},
 		{
-			"title": "Contacts",
+			"title": "Contact Us",
 			"link": "/contact"
 		}
 	],
