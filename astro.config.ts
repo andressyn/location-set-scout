@@ -50,7 +50,7 @@ export default defineConfig({
 				defaultLocale: defaultLocale,
 				locales: {
 					en: "en",
-					it: "it",
+					fr: "fr",
 				},
 			},
 			filter: (page) => !page.includes("/keystatic") && !page.includes("/api/"),

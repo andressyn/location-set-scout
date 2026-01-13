@@ -4,23 +4,30 @@
 	},
 	"pages": [
 		{
-			"title": "Home",
+			"title": "Accueil",
 			"link": "/"
 		},
 		{
-			"title": "Chi siamo",
+			"title": "À propos",
 			"link": "/about"
 		},
 		{
-			"title": "Portfolio",
+			"title": "Services",
+			"link": "/services"
+		},
+		{
+			"title": "Réalisations",
 			"link": "/works"
 		},
 		{
-			"title": "News",
+			"title": "Équipe"
+		},
+		{
+			"title": "Inscrire un lieu",
 			"link": "/news"
 		},
 		{
-			"title": "Contatti",
+			"title": "Contactez-nous",
 			"link": "/contact"
 		}
 	],

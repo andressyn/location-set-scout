@@ -2,19 +2,19 @@ import contacts from "@/content/global/contacts.json";
 import footerEn from "@/content/global/en/footer.json";
 import headerEn from "@/content/global/en/header.json";
 import seoEn from "@/content/global/en/seo.json";
-import footerIt from "@/content/global/it/footer.json";
-import headerIt from "@/content/global/it/header.json";
-import seoIt from "@/content/global/it/seo.json";
+import footerFr from "@/content/global/fr/footer.json";
+import headerFr from "@/content/global/fr/header.json";
+import seoFr from "@/content/global/fr/seo.json";
 import style from "@/content/global/style.json";
 import widget from "@/content/global/widget.json";
 import { defaultLocale, locales } from "site.config";
 
 const settings: Record<string, LocalizedSettings> = {
-	it: {
-		header: headerIt,
-		footer: footerIt,
+	fr: {
+		header: headerFr,
+		footer: footerFr,
 		contacts: contacts,
-		seo: seoIt,
+		seo: seoFr,
 		style: style,
 		widget: widget,
 	},

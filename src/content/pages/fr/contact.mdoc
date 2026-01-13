@@ -1,0 +1,26 @@
+---
+title: Contactez-nous
+type: informational
+lastUpdateDate: 2024-03-09
+hideTitle: false
+seo:
+  title: "Contactez-nous | Services de repérage de lieux Toronto | Lookout Scout"
+  description: "Communiquez avec Lookout Scout pour des services professionnels de repérage de lieux à Toronto et dans la RGT. Discutez de vos besoins de production cinématographique, télévisuelle ou publicitaire et découvrez des lieux de tournage exceptionnels."
+  author: Lookout Scout
+---
+
+{% Container %}
+
+{% Contact
+  title="Contactez-nous"
+  fields=[
+    {title: "Nom complet", placeholder: "Jean Dupont", required: true, type: "text"},
+    {title: "Courriel", placeholder: "contact@email.com", required: true, type: "email"},
+    {title: "Téléphone", placeholder: "+1 345-678", type: "tel"},
+    {title: "Horaire pour recevoir un appel", placeholder: "10h00 à 16h00", type: "text"},
+    {title: "Message", placeholder: "Écrivez votre message ici", type: "textarea", width: 2},
+    {title: "Envoyer", type: "submit", width: 2}
+  ]
+/%}
+
+{% /Container %}

@@ -16,11 +16,14 @@
 			"link": "/services"
 		},
 		{
-			"title": "Works",
+			"title": "Work",
 			"link": "/works"
 		},
 		{
-			"title": "News",
+			"title": "Team"
+		},
+		{
+			"title": "List Location",
 			"link": "/news"
 		},
 		{

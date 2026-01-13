@@ -113,6 +113,14 @@ export default defineMarkdocConfig({
 			},
 			render: component("./src/components/sections/About.astro"),
 		},
+		FAQ: {
+			attributes: {
+				title: { type: String, render: "title", required: true },
+				subtitle: { type: String, render: "subtitle" },
+				faqs: { type: Array, render: "faqs", required: true },
+			},
+			render: component("./src/components/sections/FAQ.astro"),
+		},
 		Works: {
 			attributes: {},
 			render: component("./src/components/sections/Works.astro"),

@@ -149,7 +149,7 @@ export default config({
 		pages: collection({
 			label: "Pages",
 			slugField: "title",
-			path: "src/content/pages/it/*",
+			path: "src/content/pages/fr/*",
 			entryLayout: "content",
 			columns: ["title", "lastUpdateDate"],
 			previewUrl: "/{slug}",
@@ -567,6 +567,43 @@ export default config({
 								}),
 							},
 						}),
+						FAQ: block({
+							label: "FAQ",
+							description: "Frequently Asked Questions section",
+							icon: GeneralIcon({ ariaHidden: true }),
+							schema: {
+								title: fields.text({
+									label: "Title",
+									validation: {
+										isRequired: true,
+									},
+								}),
+								subtitle: fields.text({
+									label: "Subtitle",
+								}),
+								faqs: fields.array(
+									fields.object({
+										question: fields.text({
+											label: "Question",
+											validation: {
+												isRequired: true,
+											},
+										}),
+										answer: fields.text({
+											label: "Answer",
+											multiline: true,
+											validation: {
+												isRequired: true,
+											},
+										}),
+									}),
+									{
+										label: "FAQ Items",
+										itemLabel: (props) => props.fields.question.value || "New Question",
+									},
+								),
+							},
+						}),
 						Works: block({
 							label: "Works",
 							description: "Works section",
@@ -620,7 +657,7 @@ export default config({
 		posts: collection({
 			label: "Posts",
 			slugField: "title",
-			path: "src/content/posts/it/*",
+			path: "src/content/posts/fr/*",
 			entryLayout: "content",
 			columns: ["title", "lastUpdateDate"],
 			previewUrl: "/post/{slug}",
@@ -703,7 +740,7 @@ export default config({
 		works: collection({
 			label: "Works",
 			slugField: "title",
-			path: "src/content/works/it/*",
+			path: "src/content/works/fr/*",
 			entryLayout: "content",
 			columns: ["title", "lastUpdateDate"],
 			previewUrl: "/works/{slug}",

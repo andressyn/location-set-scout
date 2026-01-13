@@ -1,0 +1,66 @@
+---
+import Link from "@/components/primitives/Link.astro";
+
+interface FAQItem {
+	question: string;
+	answer: string;
+}
+
+interface Props {
+	title: string;
+	subtitle?: string;
+	faqs: FAQItem[];
+}
+
+const { title, subtitle, faqs } = Astro.props;
+---
+
+<div class="items-center flex-col text-sm font-medium relative w-full pb-20">
+	<div class="font-semibold">
+		<div
+			class="auto-cols-fr grid-cols-1 lg:grid-cols-[.4fr_1fr] grid-rows-[auto] grid gap-[1.88rem]"
+		>
+			<div class="col-span-1 row-span-1 text-[2.50rem] leading-none">
+				<div class="items-start flex flex-col sticky top-32">
+					<div class="text-4xl lg:text-5xl font-bold">{title}</div>
+					{subtitle && (
+						<p class="text-neutral-500 text-lg font-normal mt-4 max-w-xs">
+							{subtitle}
+						</p>
+					)}
+				</div>
+			</div>
+			<div class="col-span-1 row-span-1">
+				<div class="space-y-8">
+					{faqs.map((faq, index) => (
+						<div class="faq-item border-b border-neutral-200 pb-8">
+							<h3 class="text-xl lg:text-2xl font-semibold mb-4 text-neutral-900">
+								{faq.question}
+							</h3>
+							<p class="text-neutral-600 text-base lg:text-lg leading-relaxed">
+								{faq.answer}
+							</p>
+						</div>
+					))}
+
+					<!-- More Questions Section -->
+					<div class="faq-item pt-4">
+						<h3 class="text-xl lg:text-2xl font-semibold mb-4 text-neutral-900">
+							More questions?
+						</h3>
+						<p class="text-neutral-600 text-base lg:text-lg leading-relaxed mb-6">
+							We're here to help! Reach out to our team and we'll get back to you as soon as possible.
+						</p>
+						<Link
+							href="/contact"
+							style="button"
+							icon="iconamoon:arrow-top-right-1-thin"
+						>
+							Contact Us
+						</Link>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
