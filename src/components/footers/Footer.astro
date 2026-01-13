@@ -19,6 +19,8 @@ function isActiveLocale(locale: string): boolean {
 	return locale === currentLocale;
 }
 
+const year = new Date().getFullYear();
+
 const pages = await getCollection("pages");
 const services = await getCollection("services");
 
@@ -181,7 +183,7 @@ const topServices = services
 											topInfoPages.map(
 												({ data: { title }, slug }) => (
 													<li>
-														<a href={slug}>
+														<a class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href={slug}>
 															{title}
 														</a>
 													</li>
@@ -204,7 +206,7 @@ const topServices = services
 										topServices.map(
 											({ data: { title }, slug }) => (
 												<li>
-													<a href={slug}>{title}</a>
+													<a class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href={slug}>{title}</a>
 												</li>
 											),
 										)
@@ -224,7 +226,7 @@ const topServices = services
 										relatedLinks.map(
 											({ name, link }) => (
 												<li class="whitespace-nowrap">
-													<a href={link} target="_blank" rel="noopener noreferrer">{name}</a>
+													<a class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href={link} target="_blank" rel="noopener noreferrer">{name}</a>
 												</li>
 											),
 										)
@@ -265,7 +267,7 @@ const topServices = services
 			<div class="mt-16">
 				<div class="items-center justify-between flex gap-4">
 					<p class="text-white/[0.78] text-base">
-						{footer.copyright}
+						{footer.copyright} {year} {footer.brand}
 					</p>
 					<div class="flex gap-4">
 						{

@@ -8,30 +8,34 @@ import Title from "@/components/primitives/Title.astro";
 	<div class="mx-auto text-center flex flex-col max-w-xl gap-12">
 		<div class="flex flex-col gap-4">
 			<Title level={4} tag={2}>404</Title>
-			<Title level={3} tag={1}
-				>Whoops! La pagina che stai cercando non è stata trovata.</Title
-			>
+			<Title level={3} tag={1}>
+				Whoops! The page you’re looking for can’t be found.
+			</Title>
 		</div>
 		<div class="flex flex-col gap-2">
 			<p class="text-gray-500 dark:text-gray-400">
-				Ecco alcune pagine che potresti visitare:
+				Here are some pages you might want to visit:
 			</p>
 			<ul
 				class="flex flex-wrap justify-center items-center gap-x-4 text-gray-500 dark:text-gray-400"
 			>
 				<li>
-					<Link href="/">Home</Link>
+					<Link class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href="/">Home</Link>
 				</li>
 				<li>
-					<Link href="/about">Chi siamo</Link>
+					<Link class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href="/about">About Us</Link>
 				</li>
 				<li>
-					<Link href="/servizi">Servizi</Link>
+					<Link class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href="/servizi">Services</Link>
 				</li>
 				<li>
-					<Link href="/contatti">Contatti</Link>
+					<Link class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href="/works">Our Work</Link>
+				</li>
+				<li>
+					<Link class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href="/contatti">Contact</Link>
 				</li>
 			</ul>
 		</div>
 	</div>
 </Container>
+

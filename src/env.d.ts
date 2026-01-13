@@ -30,6 +30,7 @@ declare global {
 	interface FooterSettings {
 		title: string;
 		copyright: string;
+		brand: string;
 		buttons: {
 			text: string;
 			url: string;
