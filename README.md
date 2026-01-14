@@ -92,6 +92,3 @@ Content is managed through:
 
 The site is configured for deployment on Vercel. Make sure the Vercel adapter is properly set up in `astro.config.ts` and the site URL is configured.
 
----
-
-Built with the Mizar Astro template
