@@ -1,53 +1,97 @@
-# [Mizar](https://mizar.majestico.co)
+# Lookout Scout
 
 <a href="https://astro.build/">![Astro](.github/images/astro-icon.png)</a>
 <a href="https://tailwindcss.com/">![Tailwind](.github/images/tailwind-icon.png)</a>
 <a href="https://alpinejs.dev/">![Alpine js](.github/images/alpine-icon.png)</a>
 
-Mizar is a template made with [Astro](https://astro.build), [Tailwind](https://tailwindcss.com/) and [AlpineJS](https://alpinejs.dev/).
+A professional location scouting company website built with [Astro](https://astro.build), [Tailwind](https://tailwindcss.com/), and [AlpineJS](https://alpinejs.dev/).
 
-This project was strongly inspired by a template found on Webflow which I can longer find, if you are the author please let me know so I can give you the credits.
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/majesticooss/mizar)
-
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/majesticooss/mizar)
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/majesticooss/mizar)
-
-
-### [🧪 Site preview →](https://mizar.majestico.co)
-
-### [🧑‍🚀 Astro website →](https://astro.build/)
-
-### [🕮 Astro docs →](https://docs.astro.build/en/getting-started/)
+### [🌐 Live Site →](https://lookoutscout.ca)
 
 ---
 
-## Preview
+## About the Project
 
-![Astros Preview](.github/images/screenshot.png)
+Lookout Scout is a location scouting company website designed to showcase locations for film, photography, and production purposes. The site serves as a professional landing page with a strong emphasis on visual content and easy client contact.
 
-## 🧪 Test
+## 🏗️ Project Structure
 
-On the folder run
+```
+├── src/
+│   ├── assets/          # Images and media assets
+│   ├── components/      # Reusable Astro components
+│   ├── content/         # Content collections (works, posts, authors)
+│   ├── layouts/         # Page layouts
+│   ├── pages/           # Page routes
+│   ├── styles/          # Global styles
+│   └── utils/           # Utility functions
+├── public/              # Static assets
+└── astro.config.ts      # Astro configuration
+```
 
-1. `bun install`  <small>(or `yarn` or `pnpm i`)</small>
-2. `bun run dev`  <small>(or `yarn dev` or `pnpm dev`)</small>
+## 🚀 Getting Started
 
-## ✅ Features
+1. Install dependencies:
+   ```bash
+   bun install
+   ```
 
-- [x] Localization
-- [x] Blog
-- [x] CMS for editing blog post (thanks to Keystatic)
-- [x] PWA (thanks to vite-pwa)
+2. Start the development server:
+   ```bash
+   bun run dev
+   ```
 
-## ✍️ Admin dashboard
+3. Build for production:
+   ```bash
+   bun run build
+   ```
 
-You can access the admin dashboard for editing blog post at `/keystatic` 
+## ✨ Features
 
-For more information follow Keystatic documentation at [https://keystatic.com/docs/introduction](https://keystatic.com/docs/introduction)
+- **Works Portfolio** - Showcase scouted locations and completed projects
+- **About Section** - Company information and team highlights
+- **FAQ Section** - Common questions about location scouting services
+- **Contact Form** - Easy client inquiry system
+- **Multilingual Support** - English and French localization
+- **Content Management** - Keystatic CMS for easy content editing
+- **PWA Support** - Progressive Web App capabilities
+- **SEO Optimized** - Proper metadata and social sharing support
+- **Responsive Design** - Mobile-friendly interface
 
+## 📝 Content Management
+
+Content is managed through:
+- **Markdoc (`.mdoc`)** files for structured content
+- **Keystatic CMS** - Access the admin dashboard at `/keystatic`
+- JSON configuration files in `src/content/global/`
+
+### Content Types
+- **Works** - Portfolio projects and locations
+- **Posts** - Blog articles and updates
+- **Authors** - Team member profiles
+- **Pages** - Core site pages (About, Contact, FAQ)
+
+## 🎨 Tech Stack
+
+- **Framework:** Astro 4.x
+- **Styling:** TailwindCSS
+- **Animations:** GSAP
+- **CMS:** Keystatic
+- **Deployment:** Vercel
+- **Package Manager:** Bun
+
+## 🛠️ Development Notes
+
+- Use `.mdoc` files for content pages with proper frontmatter
+- Follow Markdoc syntax for component integration
+- Configure Prettier with Astro plugin for safe formatting
+- Ensure Vercel adapter is configured for deployment
+- Maintain modular component structure for reusability
+
+## 📦 Deployment
+
+The site is configured for deployment on Vercel. Make sure the Vercel adapter is properly set up in `astro.config.ts` and the site URL is configured.
 
 ---
 
-<p align="right"><a href="https://majestico.co" target="_blank">majestico.co</p>
+Built with the Mizar Astro template
