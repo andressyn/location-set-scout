@@ -4,6 +4,9 @@ dist/
 # dependencies
 node_modules/
 
+# lock files (using npm)
+bun.lock
+
 # logs
 npm-debug.log*
 yarn-debug.log*
