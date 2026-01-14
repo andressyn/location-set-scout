@@ -23,3 +23,6 @@ pnpm-debug.log*
 .unlighthouse
 
 .wrangler
+
+# Vercel deployment configuration
+.vercel
