@@ -48,21 +48,24 @@ const worksCollection = defineCollection({
 		}),
 });
 
-const servicesCollection = defineCollection({
-	schema: ({ image }) =>
-		z.object({
-			title: z.string(),
-			pubDate: z.date(),
-			lastUpdateDate: z.date(),
-			cover: z.optional(image()),
-			description: z.string(),
-			hidden: z.optional(z.boolean()),
-		}),
+const authorsCollection = defineCollection({
+	type: "content",
+	schema: z.object({
+		name: z.string(),
+		bio: z.optional(z.string()),
+		avatar: z.optional(z.string()),
+	}),
+});
+
+const globalCollection = defineCollection({
+	type: "data",
+	schema: z.any(),
 });
 
 export const collections = {
 	posts: postsCollection,
 	pages: pagesCollection,
-	services: servicesCollection,
 	works: worksCollection,
+	authors: authorsCollection,
+	global: globalCollection,
 };

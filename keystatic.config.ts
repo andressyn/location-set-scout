@@ -610,12 +610,6 @@ export default config({
 							icon: GeneralIcon({ ariaHidden: true }),
 							schema: {},
 						}),
-						News: block({
-							label: "News",
-							description: "News section",
-							icon: GeneralIcon({ ariaHidden: true }),
-							schema: {},
-						}),
 						Contact: block({
 							label: "Contact",
 							description: "Contact form section",

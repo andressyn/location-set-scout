@@ -145,10 +145,6 @@ export default defineMarkdocConfig({
 			attributes: {},
 			render: component("./src/components/sections/Works.astro"),
 		},
-		News: {
-			attributes: {},
-			render: component("./src/components/sections/News.astro"),
-		},
 		Contact: {
 			attributes: {
 				title: { type: String, render: "title", required: true },
