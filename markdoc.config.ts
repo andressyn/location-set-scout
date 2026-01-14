@@ -113,6 +113,26 @@ export default defineMarkdocConfig({
 			},
 			render: component("./src/components/sections/About.astro"),
 		},
+		ServicesPage: {
+			attributes: {
+				title: { type: String, render: "title", required: true },
+				subtitle: { type: String, render: "subtitle", required: true },
+				services: { type: Array, render: "services", required: true },
+				listWithUsTitle: { type: String, render: "listWithUsTitle" },
+				listWithUsDescription: { type: String, render: "listWithUsDescription" },
+			},
+			render: component("./src/components/sections/ServicesPage.astro"),
+		},
+		ListWithUs: {
+			attributes: {
+				title: { type: String, render: "title", required: true },
+				subtitle: { type: String, render: "subtitle", required: true },
+				features: { type: Array, render: "features", required: true },
+				moreQuestionsTitle: { type: String, render: "moreQuestionsTitle" },
+				moreQuestionsDescription: { type: String, render: "moreQuestionsDescription" },
+			},
+			render: component("./src/components/sections/ListWithUs.astro"),
+		},
 		FAQ: {
 			attributes: {
 				title: { type: String, render: "title", required: true },

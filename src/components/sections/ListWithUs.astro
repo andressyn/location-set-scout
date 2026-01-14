@@ -1,0 +1,102 @@
+---
+import Link from "@/components/primitives/Link.astro";
+
+interface Feature {
+	title: string;
+	description: string;
+	icon: string;
+}
+
+interface Props {
+	title: string;
+	subtitle: string;
+	features: Feature[];
+	moreQuestionsTitle?: string;
+	moreQuestionsDescription?: string;
+}
+
+const {
+	title,
+	subtitle,
+	features,
+	moreQuestionsTitle = "Any questions?",
+	moreQuestionsDescription = "We want to hear from you. Please do not hesitate to contact us to answer any of your questions. We are available 24/7 to ensure your 100% clarity and satisfaction."
+} = Astro.props;
+
+const iconMap: Record<string, string> = {
+	camera: `<svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+	free: `<svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`,
+	money: `<svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><circle cx="12" cy="12" r="3"/><path d="M1 10h2M21 10h2M1 14h2M21 14h2"/></svg>`,
+	shield: `<svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>`
+};
+---
+
+<div class="items-center flex-col text-sm font-medium relative w-full pb-20">
+	<!-- Header Section -->
+	<div class="font-semibold mb-16">
+		<div class="auto-cols-fr grid-cols-1 lg:grid-cols-[.5fr_1fr] grid-rows-[auto] grid gap-[1.88rem]">
+			<div class="col-span-1 row-span-1 text-[2.50rem] leading-none">
+				<div class="items-center flex">
+					<div class="text-4xl lg:text-5xl font-bold">{title}</div>
+				</div>
+			</div>
+			<div class="col-span-1 row-span-1 text-xl lg:text-2xl">
+				<p class="text-neutral-600" set:html={subtitle} />
+			</div>
+		</div>
+	</div>
+
+	<!-- Features Grid -->
+	<div class="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-10">
+		{features.map((feature) => (
+			<div class="group bg-white border border-neutral-200 rounded-2xl p-8 lg:p-10 hover:border-[#df2021]/30 hover:shadow-lg transition-all duration-300">
+				<div class="flex items-start gap-6">
+					<div class="flex-shrink-0 w-16 h-16 bg-[#df2021]/10 rounded-xl flex items-center justify-center text-[#df2021] group-hover:bg-[#df2021] group-hover:text-white transition-all duration-300">
+						<Fragment set:html={iconMap[feature.icon] || iconMap.camera} />
+					</div>
+					<div class="flex-1">
+						<h3 class="text-xl lg:text-2xl font-bold text-neutral-900 mb-3">
+							{feature.title}
+						</h3>
+						<p class="text-neutral-600 text-base lg:text-lg leading-relaxed">
+							{feature.description}
+						</p>
+					</div>
+				</div>
+			</div>
+		))}
+	</div>
+
+	<!-- More Questions Section -->
+	<div class="mt-20 pt-16 border-t border-neutral-200">
+		<div class="bg-neutral-50 rounded-3xl p-10 lg:p-16">
+			<div class="auto-cols-fr grid-cols-1 lg:grid-cols-[1fr_auto] grid-rows-[auto] grid gap-8 items-center">
+				<div>
+					<h3 class="text-2xl lg:text-3xl font-bold text-neutral-900 mb-4">
+						{moreQuestionsTitle}
+					</h3>
+					<p class="text-neutral-600 text-lg max-w-2xl">
+						{moreQuestionsDescription}
+					</p>
+				</div>
+				<div class="flex flex-wrap gap-4">
+					<Link
+						href="/faq"
+						style="outline"
+						icon="iconamoon:arrow-top-right-1-thin"
+						class="border-neutral-300 text-neutral-700 hover:bg-neutral-900 hover:text-white px-6 py-3 rounded-md font-semibold"
+					>
+						View FAQ
+					</Link>
+					<Link
+						href="/contact"
+						style="button"
+						icon="iconamoon:arrow-top-right-1-thin"
+					>
+						Contact Us
+					</Link>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>

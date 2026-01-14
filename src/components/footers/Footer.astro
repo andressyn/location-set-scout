@@ -22,7 +22,6 @@ function isActiveLocale(locale: string): boolean {
 const year = new Date().getFullYear();
 
 const pages = await getCollection("pages");
-const services = await getCollection("services");
 
 const relatedLinks = [
 	{ name: "Toronto Film and Television Office", link: "https://www.toronto.ca/business-economy/industry-sector-support/film/" },
@@ -30,6 +29,14 @@ const relatedLinks = [
 	{ name: "Ontario Film Commission", link: "https://www.ontariocreates.ca/filmcommission/film-in-ontario" },
 	{ name: "Directors Guild of Ontario", link: "https://www.dgc.ca/en/ontario" },
 	{ name: "Film & Event Solutions", link: "https://filmandevent.ca/" },
+];
+
+// Service links with anchors to the services page sections
+const serviceLinks = [
+	{ name: "Location Scouting", anchor: "location-scouting" },
+	{ name: "Location Library", anchor: "location-library" },
+	{ name: "Location Managing", anchor: "location-managing" },
+	{ name: "List With Us", anchor: null, path: "/list" },
 ];
 
 // get top 6 pages which are informational pages
@@ -53,20 +60,8 @@ const topInfoPages = pages
 	)
 	.slice(0, 6);
 
-const topServices = services
-	.map((page) => {
-		const [lang, ...slug] = page.slug.split("/");
-		return {
-			...page,
-			lang: lang,
-			slug: translatePath(
-				lang,
-				`/service${unlocalizedUrl(`/${page.slug}`)}`,
-			),
-		};
-	})
-	.filter((page) => page.lang === currentLocale)
-	.slice(0, 6);
+// Build services page path based on current locale
+const servicesPagePath = translatePath(currentLocale ?? defaultLocale, "/services");
 
 
 ---
@@ -207,10 +202,15 @@ const topServices = services
 								</p>
 								<ul class="text-white/[0.65] mb-3 list-none">
 									{
-										topServices.map(
-											({ data: { title }, slug }) => (
+										serviceLinks.map(
+											({ name, anchor, path }) => (
 												<li>
-													<a class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors" href={slug}>{title}</a>
+													<a
+														class="hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+														href={path ? translatePath(currentLocale ?? defaultLocale, path) : `${servicesPagePath}#${anchor}`}
+													>
+														{name}
+													</a>
 												</li>
 											),
 										)

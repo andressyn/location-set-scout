@@ -1,0 +1,107 @@
+---
+import Link from "@/components/primitives/Link.astro";
+
+interface ServiceItem {
+	id: string;
+	title: string;
+	description: string;
+}
+
+interface Props {
+	title: string;
+	subtitle: string;
+	services: ServiceItem[];
+	listWithUsTitle?: string;
+	listWithUsDescription?: string;
+}
+
+const {
+	title,
+	subtitle,
+	services,
+	listWithUsTitle = "Want to list your property?",
+	listWithUsDescription = "Turn your space into a filming destination. Join our location library and connect with productions looking for spaces just like yours."
+} = Astro.props;
+---
+
+<div class="items-center flex-col text-sm font-medium relative w-full pb-20">
+	<!-- Header Section -->
+	<div class="font-semibold mb-20">
+		<div
+			class="auto-cols-fr grid-cols-1 lg:grid-cols-[.5fr_1fr] grid-rows-[auto] grid gap-[1.88rem]"
+		>
+			<div class="col-span-1 row-span-1 text-[2.50rem] leading-none">
+				<div class="items-center flex">
+					<div class="text-4xl lg:text-5xl font-bold">{title}</div>
+				</div>
+			</div>
+			<div class="col-span-1 row-span-1 text-xl lg:text-2xl">
+				<p class="text-neutral-600" set:html={subtitle} />
+			</div>
+		</div>
+	</div>
+
+	<!-- Services List -->
+	<div class="space-y-24 lg:space-y-32">
+		{services.map((service, index) => (
+			<div
+				id={service.id}
+				class="service-item scroll-mt-32"
+			>
+				<div class="auto-cols-fr grid-cols-1 lg:grid-cols-[.35fr_1fr] grid-rows-[auto] grid gap-8 lg:gap-[3rem]">
+					<!-- Service Number & Title -->
+					<div class="col-span-1 row-span-1">
+						<div class="sticky top-32">
+							<div class="flex items-center gap-4 mb-4">
+								<span class="text-6xl lg:text-7xl font-bold text-neutral-200">
+									{String(index + 1).padStart(2, '0')}
+								</span>
+							</div>
+							<h2 class="text-2xl lg:text-3xl font-bold text-neutral-900">
+								{service.title}
+							</h2>
+						</div>
+					</div>
+
+					<!-- Service Description -->
+					<div class="col-span-1 row-span-1">
+						<div class="bg-neutral-50 rounded-2xl p-8 lg:p-12 border border-neutral-100">
+							<div
+								class="text-neutral-700 text-base lg:text-lg leading-relaxed prose prose-lg max-w-none"
+								set:html={service.description}
+							/>
+						</div>
+					</div>
+				</div>
+			</div>
+		))}
+	</div>
+
+	<!-- List With Us CTA Section -->
+	<div class="mt-32 pt-16 border-t border-neutral-200">
+		<div class="bg-gradient-to-br from-neutral-900 to-neutral-800 rounded-3xl p-10 lg:p-16 text-center">
+			<div class="max-w-2xl mx-auto">
+				<div class="inline-flex items-center gap-2 bg-[#df2021]/10 text-[#df2021] px-4 py-2 rounded-full text-sm font-semibold mb-6">
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+						<circle cx="12" cy="10" r="3"/>
+					</svg>
+					<span>Property Owners</span>
+				</div>
+				<h3 class="text-3xl lg:text-4xl font-bold text-white mb-4">
+					{listWithUsTitle}
+				</h3>
+				<p class="text-neutral-400 text-lg mb-8">
+					{listWithUsDescription}
+				</p>
+				<Link
+					href="/list"
+					style="buttonLight"
+					icon="iconamoon:arrow-top-right-1-thin"
+				>
+					List Your Property
+				</Link>
+			</div>
+		</div>
+	</div>
+</div>
