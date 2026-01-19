@@ -1,8 +1,13 @@
 ---
 import { type CollectionEntry, getCollection } from "astro:content";
-import type { ButtonProps } from "@/components/primitives/Button.astro";
-import Link from "@/components/primitives/Link.astro";
 import WorkPreview from "@/components/sections/WorkPreview.astro";
+
+interface Props {
+	title?: string;
+	subtitle?: string;
+}
+
+const { title, subtitle } = Astro.props;
 
 const currentLocale = Astro.currentLocale;
 
@@ -17,15 +22,112 @@ const allWorks = works
 			slug: work.slug.startsWith("/") ? work.slug : `/${work.slug}`,
 		};
 	})
-	.filter((page) => page.lang === currentLocale)
+	.filter((page) => page.lang === currentLocale && !page.data.hidden)
 	.sort(
 		(a, b) =>
-			a.data.lastUpdateDate.getTime() - b.data.lastUpdateDate.getTime(),
+			b.data.lastUpdateDate.getTime() - a.data.lastUpdateDate.getTime(),
 	) as CollectionEntry<"works">[];
+
+// Group works by company (or title if no company specified)
+const groupedWorks = allWorks.reduce((acc, work) => {
+	const groupKey = work.data.company || work.data.title;
+	if (!acc[groupKey]) {
+		acc[groupKey] = [];
+	}
+	acc[groupKey].push(work);
+	return acc;
+}, {} as Record<string, CollectionEntry<"works">[]>);
+
+// Sort groups by the most recent video in each group
+const sortedGroups = Object.entries(groupedWorks).sort(([, a], [, b]) => {
+	const aDate = Math.max(...a.map(w => w.data.lastUpdateDate.getTime()));
+	const bDate = Math.max(...b.map(w => w.data.lastUpdateDate.getTime()));
+	return bDate - aDate;
+});
+
+// Separate single videos from grouped videos
+const singleWorks = sortedGroups.filter(([, works]) => works.length === 1);
+const multiWorks = sortedGroups.filter(([, works]) => works.length > 1);
 ---
 
-<div
-	class="text-sm font-medium auto-cols-fr grid-cols-1 md:grid-cols-2 grid-rows-[auto] grid gap-9 pb-40"
->
-	{allWorks.map((work) => <WorkPreview {work} />)}
+{(title || subtitle) && (
+	<div class="mb-20 text-center max-w-4xl mx-auto">
+		{title && (
+			<h1 class="text-5xl md:text-6xl lg:text-7xl font-medium tracking-tight mb-6">
+				{title}
+			</h1>
+		)}
+		{subtitle && (
+			<p class="text-xl md:text-2xl text-neutral-600 leading-relaxed" set:html={subtitle} />
+		)}
+	</div>
+)}
+
+<div class="works-container pb-32">
+	{/* Featured Collections - Companies with multiple videos */}
+	{multiWorks.length > 0 && (
+		<div class="featured-collections mb-20">
+			<div class="flex items-center gap-4 mb-10">
+				<div class="h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent flex-1"></div>
+				<span class="text-sm font-medium text-neutral-500 uppercase tracking-widest">
+					{currentLocale === 'fr' ? 'Collections' : 'Collections'}
+				</span>
+				<div class="h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent flex-1"></div>
+			</div>
+
+			<div class="space-y-16">
+				{multiWorks.map(([groupName, groupWorks]) => (
+					<div class="collection-group">
+						<div class="collection-header flex items-end justify-between mb-6">
+							<div>
+								<h2 class="text-2xl md:text-3xl font-semibold tracking-tight">
+									{groupName}
+								</h2>
+								<div class="flex items-center gap-2 mt-1">
+									<span class="inline-block w-10 h-0.5 bg-red-500 rounded-full"></span>
+
+								</div>
+							</div>
+						</div>
+						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+							{groupWorks.map((work) => (
+								<WorkPreview work={work} showTitle={false} />
+							))}
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	)}
+
+	{/* All Other Works */}
+	{singleWorks.length > 0 && (
+		<div class="all-works">
+			{multiWorks.length > 0 && (
+				<div class="flex items-center gap-4 mb-10">
+					<div class="h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent flex-1"></div>
+					<span class="text-sm font-medium text-neutral-500 uppercase tracking-widest">
+						{currentLocale === 'fr' ? 'Plus de Projets' : 'More Projects'}
+					</span>
+					<div class="h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent flex-1"></div>
+				</div>
+			)}
+
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+				{singleWorks.map(([, works]) => (
+					<WorkPreview work={works[0]} showTitle={true} />
+				))}
+			</div>
+		</div>
+	)}
 </div>
+
+<style>
+	.collection-group {
+		@apply bg-neutral-50/50 rounded-2xl p-6 md:p-8;
+	}
+
+	.collection-group:hover {
+		@apply bg-neutral-50;
+	}
+</style>

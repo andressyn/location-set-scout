@@ -17,10 +17,10 @@ const recentWorks = works
 			slug: work.slug.startsWith("/") ? work.slug : `/${work.slug}`,
 		};
 	})
-	.filter((page) => page.lang === currentLocale)
+	.filter((page) => page.lang === currentLocale && !page.data.hidden)
 	.sort(
 		(a, b) =>
-			a.data.lastUpdateDate.getTime() - b.data.lastUpdateDate.getTime(),
+			b.data.lastUpdateDate.getTime() - a.data.lastUpdateDate.getTime(),
 	)
 	.slice(0, 4) as CollectionEntry<"works">[];
 
@@ -39,7 +39,7 @@ const { title, buttons } = Astro.props as Props;
 <div
 	class="text-sm font-medium auto-cols-fr grid-cols-1 md:grid-cols-2 grid-rows-[auto_auto] grid gap-[3.13rem]"
 >
-	{recentWorks.map((work) => <WorkPreview {work} />)}
+	{recentWorks.map((work) => <WorkPreview work={work} showTitle={true} />)}
 </div>
 <div
 	class="items-center flex-col text-sm font-medium flex text-white pt-16 pb-20"

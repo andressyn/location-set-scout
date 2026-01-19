@@ -142,7 +142,10 @@ export default defineMarkdocConfig({
 			render: component("./src/components/sections/FAQ.astro"),
 		},
 		Works: {
-			attributes: {},
+			attributes: {
+				title: { type: String, render: "title" },
+				subtitle: { type: String, render: "subtitle" },
+			},
 			render: component("./src/components/sections/Works.astro"),
 		},
 		Contact: {

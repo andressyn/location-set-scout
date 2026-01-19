@@ -34,16 +34,15 @@ const postsCollection = defineCollection({
 });
 
 const worksCollection = defineCollection({
-	schema: ({ image }) =>
+	schema: () =>
 		z.object({
 			title: z.string(),
+			company: z.optional(z.string()), // For grouping multiple videos under one company
+			videoTitle: z.optional(z.string()), // Optional subtitle for the specific video
+			videoUrl: z.string(),
+			videoType: z.enum(['youtube', 'vimeo']),
 			pubDate: z.date(),
 			lastUpdateDate: z.date(),
-			cover: image(),
-			video: z.optional(z.string()),
-			description: z.string(),
-			link: z.optional(z.string()),
-			tags: z.array(z.string()),
 			hidden: z.optional(z.boolean()),
 		}),
 });
