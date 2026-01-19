@@ -67,8 +67,29 @@ const iconMap: Record<string, string> = {
 		))}
 	</div>
 
-	<!-- More Questions Section -->
+	<!-- List Your Location CTA -->
 	<div class="mt-20 pt-16 border-t border-neutral-200">
+		<div class="bg-gradient-to-br from-neutral-900 to-neutral-800 rounded-3xl p-10 lg:p-16 text-center">
+			<div class="max-w-2xl mx-auto">
+				<h3 class="text-3xl lg:text-4xl font-bold text-white mb-4">
+					Ready to list your location?
+				</h3>
+				<p class="text-neutral-400 text-lg mb-8">
+					Get started today and connect your property with top film and production teams looking for spaces just like yours.
+				</p>
+				<Link
+					href="/contact"
+					style="buttonLight"
+					icon="iconamoon:arrow-top-right-1-thin"
+				>
+					List Your Location
+				</Link>
+			</div>
+		</div>
+	</div>
+
+	<!-- More Questions Section -->
+	<div class="mt-12">
 		<div class="bg-neutral-50 rounded-3xl p-10 lg:p-16">
 			<div class="auto-cols-fr grid-cols-1 lg:grid-cols-[1fr_auto] grid-rows-[auto] grid gap-8 items-center">
 				<div>
@@ -84,7 +105,7 @@ const iconMap: Record<string, string> = {
 						href="/faq"
 						style="outline"
 						icon="iconamoon:arrow-top-right-1-thin"
-						class="border-neutral-300 text-neutral-700 hover:bg-neutral-900 hover:text-white px-6 py-3 rounded-md font-semibold"
+						class="faq-link border-neutral-300 text-neutral-700 hover:border-neutral-900 px-6 py-3 rounded-md font-semibold"
 					>
 						View FAQ
 					</Link>
@@ -100,3 +121,11 @@ const iconMap: Record<string, string> = {
 		</div>
 	</div>
 </div>
+
+<style>
+	.faq-link:hover {
+		background-color: transparent !important;
+		color: #171717 !important;
+		border-color: #171717 !important;
+	}
+</style>
