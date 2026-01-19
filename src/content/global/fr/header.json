@@ -12,6 +12,10 @@
 			"link": "/about"
 		},
 		{
+			"title": "Équipe",
+			"link": "/team"
+		},
+		{
 			"title": "Services",
 			"link": "/services"
 		},

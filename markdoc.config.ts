@@ -152,5 +152,13 @@ export default defineMarkdocConfig({
 			},
 			render: component("./src/components/sections/Contact.astro"),
 		},
+		Team: {
+			attributes: {
+				title: { type: String, render: "title", required: true },
+				subtitle: { type: String, render: "subtitle", required: true },
+				members: { type: Array, render: "members", required: true },
+			},
+			render: component("./src/components/sections/Team.astro"),
+		},
 	},
 });
